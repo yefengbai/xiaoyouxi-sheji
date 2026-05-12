@@ -326,7 +326,7 @@ function initBackground(){
     STATE.bgImgH=STATE.bgImage.naturalHeight||600;
   };
   STATE.bgImage.onerror=()=>{STATE.bgLoaded=false};
-  STATE.bgImage.src='https://aka.doubaocdn.com/s/V0YV1wPMJb';
+  STATE.bgImage.src='https://aka.doubaocdn.com/s/4cAV1wPNcq';
 
   // 创建400x300草原瓦片 (fallback)
   const t=document.createElement('canvas');t.width=400;t.height=300;
@@ -719,21 +719,19 @@ function render(){
 }
 
 function drawBackground(cam){
-  const VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H;
+  const WW=CONFIG.WORLD_W,WH=CONFIG.WORLD_H;
   if(STATE.bgLoaded&&STATE.bgImage){
-    const iw=STATE.bgImgW||800,ih=STATE.bgImgH||600;
-    const sx=Math.floor(cam.x/iw)*iw,sy=Math.floor(cam.y/ih)*ih;
-    for(let tx=sx;tx<cam.x+VW+iw;tx+=iw)
-      for(let ty=sy;ty<cam.y+VH+ih;ty+=ih)
-        ctx.drawImage(STATE.bgImage,tx,ty,iw,ih);
+    // 直接拉伸铺满整个地图，不做拼接
+    ctx.drawImage(STATE.bgImage,0,0,WW,WH);
   } else if(STATE.bgTile){
+    const VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H;
     const iw=400,ih=300;
     const sx=Math.floor(cam.x/iw)*iw,sy=Math.floor(cam.y/ih)*ih;
     for(let tx=sx;tx<cam.x+VW+iw;tx+=iw)
       for(let ty=sy;ty<cam.y+VH+ih;ty+=ih)
         ctx.drawImage(STATE.bgTile,tx,ty);
   } else {
-    ctx.fillStyle='#3d6a2a';ctx.fillRect(cam.x,cam.y,VW,VH);
+    ctx.fillStyle='#3d6a2a';ctx.fillRect(cam.x,cam.y,CONFIG.VIEW_W,CONFIG.VIEW_H);
   }
 }
 
