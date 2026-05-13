@@ -42,7 +42,7 @@ canvas{
   width:100%;height:auto;background:#000;
   box-shadow:0 0 30px rgba(0,0,0,0.6),inset 0 0 60px rgba(0,0,0,0.3);
 }
-#bottom-bar{display:flex;flex-direction:column;gap:5px;padding:8px 14px}
+#bottom-bar{display:flex;flex-direction:column;gap:5px;padding:8px 14px;position:relative}
 .bar-row{display:flex;align-items:center;gap:8px;font-size:9px}
 .bar-row .label{width:22px;color:var(--text-dim);text-align:center;font-size:8px}
 .bar-row .bar-track{flex:1;height:14px;background:#12121e;border:2px solid #2a2a3c;box-shadow:inset 0 2px 4px rgba(0,0,0,0.6);position:relative;overflow:hidden}
@@ -56,7 +56,7 @@ canvas{
 #stats-row .val{color:#fff}#stats-row .gold{color:var(--gold)}
 .lv-badge{display:flex;align-items:center;gap:4px;font-size:14px;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,0.4)}
 .lv-badge .lv-num{font-size:20px}
-#minimap{position:absolute;bottom:130px;right:14px;width:120px;height:120px;border:2px solid var(--panel-border);background:rgba(0,0,0,0.6);z-index:10;border-top-color:var(--panel-border-light);border-left-color:var(--panel-border-light)}
+#minimap{position:absolute;top:48px;left:8px;width:120px;height:120px;border:2px solid var(--panel-border);background:rgba(0,0,0,0.6);z-index:10;border-top-color:var(--panel-border-light);border-left-color:var(--panel-border-light)}
 #minimap canvas{width:100%;height:100%;border:none;box-shadow:none}
 .btn{padding:5px 12px;background:var(--card-bg);color:var(--text);border:2px solid var(--panel-border);font-family:inherit;font-size:8px;cursor:pointer;letter-spacing:0.5px;transition:background 0.12s,border-color 0.12s,transform 0.1s}
 .btn:hover{background:var(--card-hover);border-color:var(--accent);transform:translateY(-1px)}
@@ -77,6 +77,19 @@ canvas{
 .upgrade-card .uc-desc{font-size:6px;color:var(--text-dim);margin-top:2px;line-height:1.4}
 #gameover-stats{text-align:left;margin:10px 0;font-size:8px;line-height:2.2}
 #gameover-stats span{color:var(--accent)}
+/* 右下角升级悬浮面板 */
+#upgrade-panel{display:none;position:absolute;bottom:100%;right:0;z-index:50;margin-bottom:4px;background:rgba(8,8,22,0.92);border:2px solid #4ecb71;border-top-color:#7def7d;border-left-color:#7def7d;padding:6px 8px;border-radius:4px;box-shadow:0 0 12px rgba(78,203,113,0.25),0 4px 16px rgba(0,0,0,0.6);max-width:270px}
+#upgrade-panel.active{display:block;animation:panelIn 0.2s ease}
+@keyframes panelIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+.up-panel-title{font-size:8px;color:#4ecb71;margin-bottom:4px;text-align:center;letter-spacing:0.5px}
+.up-panel-title span{color:#ffd700;margin-left:4px}
+.up-cards{display:flex;gap:5px;justify-content:center;flex-wrap:nowrap}
+.up-cards .up-card{width:78px;padding:6px 4px;background:rgba(20,24,40,0.9);border:1px solid #3a4a5c;cursor:pointer;text-align:center;transition:all 0.1s;border-radius:2px}
+.up-cards .up-card:hover{background:rgba(30,50,70,0.9);border-color:#5b9bd5;transform:translateY(-2px);box-shadow:0 4px 12px rgba(91,155,213,0.25)}
+.up-cards .up-card .uc-icon{font-size:14px;margin-bottom:2px}
+.up-cards .up-card .uc-name{font-size:7px;font-weight:bold;margin-bottom:1px}
+.up-cards .up-card .uc-value{font-size:8px;color:#4ecb71;font-weight:bold}
+.up-cards .up-card .uc-desc{font-size:5px;color:var(--text-dim);margin-top:1px;line-height:1.3}
 </style>
 </head>
 <body>
@@ -112,8 +125,14 @@ canvas{
       <span style="margin-left:auto;display:flex;gap:6px">
         <button class="btn" id="btn-music" onclick="toggleMusic()">🎵</button>
         <button class="btn" id="btn-mute" onclick="toggleMute()">🔊</button>
+        <button class="btn" id="btn-debug" onclick="toggleDebug()" style="color:#ff4444;border-color:#ff4444">🐛 测试</button>
         <button class="btn" id="btn-pause" onclick="togglePause()">⏸ PAUSE</button>
       </span>
+    </div>
+    <!-- 升级悬浮面板 - 在ATK值上方 -->
+    <div id="upgrade-panel" class="upgrade-panel">
+      <div class="up-panel-title">⬆ LEVEL UP! <span id="up-pending"></span></div>
+      <div id="upgrade-cards" class="up-cards"></div>
     </div>
   </div>
 </div>
@@ -124,18 +143,11 @@ canvas{
     <p>英雄幸存者 — 三大流派自由构筑</p>
     <p style="font-size:7px;line-height:2">
       ⚔️ 输出流：破甲·连击·毒素·斩杀 &nbsp;|&nbsp; 🛡 肉盾流：吸血·反伤·减伤·护盾<br>
-      📈 发育流：经验·金币·拾取范围拉满 &nbsp;|&nbsp; 👾 每10波大BOSS<br>
-      🎮 WASD移动 &nbsp;|&nbsp; 🎯 自动攻击 &nbsp;|&nbsp; 🟣 远程怪 &nbsp;|&nbsp; ⭐ 精英怪
+      📈 发育流：经验·金币·拾取范围拉满 &nbsp;|&nbsp; 👾 BOSS第10/20波<br>
+      👻 幽灵出没·恐怖氛围 &nbsp;|&nbsp; 🎮 WASD移动 &nbsp;|&nbsp; 🎯 自动攻击<br>
+      🟣 远程·精英·连发弹幕 &nbsp;|&nbsp; 💀 20波全清 = 胜利
     </p>
     <button class="btn accent" onclick="startGame()" style="margin-top:6px;font-size:13px;padding:10px 36px">⚡ START</button>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-upgrade">
-  <div class="modal-box">
-    <h2 style="color:#4ecb71">⬆ LEVEL UP!</h2>
-    <p>选择一项强化 (3选1)</p>
-    <div id="upgrade-cards"></div>
   </div>
 </div>
 
@@ -174,20 +186,22 @@ const CONFIG = {
     fast:  {name:'蝙蝠',  hp:24,atk:6,speed:140,radius:11,xp:7,gold:3,color:'#f39c12',colorLight:'#f7dc6f'},
     tank:  {name:'石魔像',hp:100,atk:18,speed:80,radius:19,xp:11,gold:5,color:'#8e44ad',colorLight:'#bb8fce'},
     ranged:{name:'暗法师',hp:32,atk:14,speed:90,radius:14,xp:8,gold:4,color:'#7b2d8b',colorLight:'#c97dff',shootCd:1800,shootRange:320},
+    ghost:{name:'幽灵',hp:55,atk:18,speed:155,radius:14,xp:15,gold:8,color:'#55cccc',colorLight:'#aaeeee'},
   },
-  ENEMY_SPAWN_RATIO:[40,20,20,20],
+  ENEMY_SPAWN_RATIO:[30,16,16,16,22],
 
   ELITE:{hpMult:2,atkMult:2,xpMult:3,goldMult:3,perWave:3,color:'#ff2244',namePrefix:'精英',shootCd:2200,shootRange:300},
 
   BOSS:{
-    hpMult:20,atkMult:5,xpMult:8,goldMult:10,
+    hpMult:200,atkMult:5,xpMult:8,goldMult:10,
     speed:85,radius:42,
     color:'#c0392b',glowColor:'#ff4444',
   },
   BOSS_EVERY:10,
 
-  WAVE:{baseEnemies:8,enemiesPerWave:5,statMultPerWave:0.10},
-  DIFFICULTY:{interval:5,statBoost:0.25},
+  WAVE:{baseEnemies:6,enemiesPerWave:3,statMultPerWave:0.07},
+  DIFFICULTY:{interval:5,statBoost:0.22},
+  TOTAL_WAVES:20,
 
   PROJECTILE:{speed:550,radius:4,color:'#f1c40f'},
   ENEMY_PROJECTILE:{speed:260,radius:5,color:'#e040e0'},
@@ -228,9 +242,11 @@ const STATE={
   wave:{number:1,totalEnemies:5,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:0,spawnInterval:350,waveDelay:1500,waveDelayTimer:0,transitioning:false},
   stats:{kills:0,bossKills:0,totalGold:0,eliteKills:0},
   keys:{},mouse:{x:0,y:0},
-  upgradeChoices:[],pendingUpgrades:0,
+  upgradeChoices:[],pendingUpgrades:0,upgradePanelVisible:false,
   attackCooldown:0,invincibleTimer:0,
   screenShake:{intensity:0,duration:0},bossFlash:0,
+  horrorFlicker:0,horrorTimer:0,
+  debugMode:false,
   comboCount:0,comboTimer:0,
   bgImage:null,bgLoaded:false,bgImgW:800,bgImgH:600,bgTile:null,
   camera:{x:0,y:0},
@@ -242,8 +258,8 @@ const DOM={
   hudGold:$('hud-gold'),hudLv:$('hud-lv'),hudAtk:$('hud-atk'),hudSpd:$('hud-spd'),hudCd:$('hud-cd'),
   hpFill:$('hp-fill'),hpText:$('hp-text'),xpFill:$('xp-fill'),xpText:$('xp-text'),
   bossAlert:$('boss-alert'),btnPause:$('btn-pause'),btnMute:$('btn-mute'),
-  btnMusic:$('btn-music'),modalStart:$('modal-start'),modalUpgrade:$('modal-upgrade'),modalGameover:$('modal-gameover'),
-  upgradeCards:$('upgrade-cards'),gameoverStats:$('gameover-stats'),
+  btnMusic:$('btn-music'),btnDebug:$('btn-debug'),modalStart:$('modal-start'),modalGameover:$('modal-gameover'),
+  upgradeCards:$('upgrade-cards'),upgradePanel:$('upgrade-panel'),upPending:$('up-pending'),gameoverStats:$('gameover-stats'),
   hudRegen:$('hud-regen'),hudRegenDisp:$('hud-regen-disp'),hudLvTop:$('hud-lv-top'),
   hudDiff:$('hud-diff'),hudShield:$('hud-shield'),hudShieldDisp:$('hud-shield-disp'),
 };
@@ -382,32 +398,38 @@ function getInputDir(){const k=STATE.keys;let dx=0,dy=0;if(k['ArrowLeft']||k['Ke
    刷怪 — 精英/远程/世界梯度/难度递增/BOSS每10波
    ============================================================ */
 let _eid=0;
-function pickEnemyType(){const r=CONFIG.ENEMY_SPAWN_RATIO,t=r[0]+r[1]+r[2]+r[3];let v=Math.random()*t;const keys=Object.keys(CONFIG.ENEMY_TYPES);for(let i=0;i<keys.length;i++){v-=r[i];if(v<=0)return keys[i]}return keys[0]}
+function pickEnemyType(){const r=CONFIG.ENEMY_SPAWN_RATIO;const keys=Object.keys(CONFIG.ENEMY_TYPES);const maxIdx=STATE.wave.number>=6?keys.length:keys.length-1;let t=0;for(let i=0;i<maxIdx;i++)t+=r[i];let v=Math.random()*t;for(let i=0;i<maxIdx;i++){v-=r[i];if(v<=0)return keys[i]}return keys[0]}
 function edgePos(){const cam=getCamera(),VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H,m=40;switch(randInt(0,3)){case 0:return{x:rand(cam.x-m,cam.x+VW+m),y:cam.y-m};case 1:return{x:rand(cam.x-m,cam.x+VW+m),y:cam.y+VH+m};case 2:return{x:cam.x-m,y:rand(cam.y-m,cam.y+VH+m)};default:return{x:cam.x+VW+m,y:rand(cam.y-m,cam.y+VH+m)}}}
 function createEnemy(type,pos,isElite=false){
   const t=CONFIG.ENEMY_TYPES[type],diff=getDifficultyMult();
   const grad=getWorldGradient(pos.x,pos.y);
   const mult=diff*grad;
-  let hp=Math.floor(t.hp*mult),atk=Math.floor(t.atk*mult),xp=Math.floor(t.xp*mult),gold=t.gold;
+  // 15波后恐怖激增
+  const horrorSurge=STATE.wave.number>=15?1.35:1;
+  const debugMult=STATE.debugMode?0.2:1;
+  let hp=Math.floor(t.hp*mult*horrorSurge*debugMult),atk=Math.floor(t.atk*mult*horrorSurge),xp=Math.floor(t.xp*mult),gold=t.gold;
   if(isElite){
     hp=Math.floor(hp*CONFIG.ELITE.hpMult);atk=Math.floor(atk*CONFIG.ELITE.atkMult);
     xp=Math.floor(xp*CONFIG.ELITE.xpMult);gold=Math.floor(gold*CONFIG.ELITE.goldMult);
   }
   return{
     id:++_eid,x:pos.x,y:pos.y,hp,maxHp:hp,atk,
-    speed:t.speed*(1+(STATE.wave.number-1)*0.03),
+    speed:t.speed*(1+(STATE.wave.number-1)*0.04),
     radius:t.radius+(isElite?4:0),type,color:isElite?CONFIG.ELITE.color:t.color,colorLight:t.colorLight||t.color,
     xpValue:xp,goldValue:gold,lastDmgTime:0,flashTimer:0,isElite,
     shootCd:isElite?CONFIG.ELITE.shootCd:0,shootTimer:isElite?rand(500,2500):0,
     poisonTimer:0,poisonDmg:0,
     strafeDir:0,strafeTimer:0,
+    phaseTimer:type==='ghost'?rand(500,3500):0,
   };
 }
 function createBoss(){
   const w=STATE.wave.number,diff=getDifficultyMult();
-  const baseHp=CONFIG.ENEMY_TYPES.normal.hp*diff*CONFIG.BOSS.hpMult;
-  const baseAtk=CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult;
-  const hp=Math.floor(baseHp+w*200),atk=Math.floor(baseAtk+w*8);
+  const isFinalBoss=w===CONFIG.TOTAL_WAVES;
+  // BOSS HP随波次递增: 10波≈27000, 20波魔王=200000
+  const debugMult=STATE.debugMode?0.2:1;
+  const hp=Math.floor((isFinalBoss?200000:15000+w*1200)*debugMult);
+  const atk=Math.floor(CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8));
   return{
     id:++_eid,x:edgePos().x,y:edgePos().y,
     hp,maxHp:hp,atk,speed:CONFIG.BOSS.speed,radius:CONFIG.BOSS.radius,
@@ -420,8 +442,11 @@ function createBoss(){
 }
 function initWave(n){
   const w=STATE.wave;w.number=n;w.killed=0;w.spawned=0;w.bossActive=false;w.transitioning=false;
-  const cnt=CONFIG.WAVE.baseEnemies+(n-1)*CONFIG.WAVE.enemiesPerWave;
-  const eliteCnt=CONFIG.ELITE.perWave;
+  // 后期波次更多敌人
+  const extraPerWave=n>10?(n-10)*1.5:0;
+  const cnt=Math.floor(CONFIG.WAVE.baseEnemies+(n-1)*CONFIG.WAVE.enemiesPerWave+extraPerWave);
+  // 精英随波次递增: 2→7
+  const eliteCnt=Math.min(2+Math.floor((n-1)/4),7);
   w.totalEnemies=cnt+eliteCnt+(n%CONFIG.BOSS_EVERY===0?1:0);w.spawnQueue=[];
   for(let i=0;i<eliteCnt;i++)w.spawnQueue.push('elite');
   for(let i=0;i<cnt;i++)w.spawnQueue.push(pickEnemyType());
@@ -432,8 +457,10 @@ function initWave(n){
 function updateSpawning(dt){
   const w=STATE.wave;
   if(w.transitioning){w.waveDelayTimer-=dt;if(w.waveDelayTimer<=0){w.transitioning=false;initWave(w.number);sfxWaveStart()}return}
-  if(w.spawned>=w.spawnQueue.length&&STATE.enemies.length===0){w.number++;w.transitioning=true;w.waveDelayTimer=w.waveDelay;return}
-  if(w.spawned<w.spawnQueue.length){w.spawnTimer+=dt;while(w.spawnTimer>=w.spawnInterval&&w.spawned<w.spawnQueue.length){w.spawnTimer-=w.spawnInterval;const type=w.spawnQueue[w.spawned];if(type==='boss'){const boss=createBoss();STATE.enemies.push(boss);w.bossActive=true;triggerShake(14,600);STATE.bossFlash=400;sfxBossSpawn()}else if(type==='elite'){STATE.enemies.push(createEnemy(pickEnemyType(),edgePos(),true))}else STATE.enemies.push(createEnemy(type,edgePos()));w.spawned++}}
+  if(w.spawned>=w.spawnQueue.length&&STATE.enemies.length===0){
+    if(w.number>=CONFIG.TOTAL_WAVES){victory();return}
+    w.number++;w.transitioning=true;w.waveDelayTimer=w.waveDelay;return}
+  if(w.spawned<w.spawnQueue.length){w.spawnTimer+=dt;while(w.spawnTimer>=w.spawnInterval&&w.spawned<w.spawnQueue.length){w.spawnTimer-=w.spawnInterval;const type=w.spawnQueue[w.spawned];if(type==='boss'){const boss=createBoss();STATE.enemies.push(boss);w.bossActive=true;triggerShake(w.number===CONFIG.TOTAL_WAVES?22:14,w.number===CONFIG.TOTAL_WAVES?1000:600);STATE.bossFlash=w.number===CONFIG.TOTAL_WAVES?700:400;if(w.number===CONFIG.TOTAL_WAVES)spawnFloatText(boss.x,boss.y-30,'魔王降临!','#ff0000');sfxBossSpawn()}else if(type==='elite'){STATE.enemies.push(createEnemy(pickEnemyType(),edgePos(),true))}else STATE.enemies.push(createEnemy(type,edgePos()));w.spawned++}}
 }
 
 /* ============================================================
@@ -496,6 +523,8 @@ function updateCombat(dt){
   }
   // 敌人接触伤害
   for(const e of STATE.enemies){
+    // 幽灵相位时无碰撞伤害
+    if(e.type==='ghost'&&e.phaseTimer<1400)continue;
     if(dist(p.x,p.y,e.x,e.y)<p.radius+e.radius&&now-e.lastDmgTime>500&&STATE.invincibleTimer<=0){
       let dmg=e.atk;
       if(p.damageReduction>0)dmg=Math.floor(dmg*(1-p.damageReduction/100));
@@ -511,11 +540,13 @@ function updateCombat(dt){
     if(e.poisonTimer>0&&e.poisonDmg>0){e.poisonTimer-=dt;const tick=dt/1000*e.poisonDmg;e.hp-=tick;if(e.hp<=0)killEnemy(e)}
   }
 }
-function dealDamage(enemy,dmg){enemy.hp-=dmg;enemy.flashTimer=60;if(enemy.hp<=0)killEnemy(enemy)}
+function dealDamage(enemy,dmg){if(enemy.type==='ghost'&&enemy.phaseTimer<1400)return;enemy.hp-=dmg;enemy.flashTimer=60;if(enemy.hp<=0)killEnemy(enemy)}
 function killEnemy(enemy){
   const idx=STATE.enemies.indexOf(enemy);if(idx!==-1)STATE.enemies.splice(idx,1);
   STATE.stats.kills++;STATE.wave.killed++;if(enemy.isElite)STATE.stats.eliteKills++;
   spawnDrops(enemy);spawnParticles(enemy.x,enemy.y,enemy.color,enemy.radius);
+  // 血腥溅射效果 (5波后)
+  if(STATE.wave.number>=5)for(let i=0;i<6;i++){const a2=rand(0,Math.PI*2),s2=rand(40,200);STATE.particles.push({x:enemy.x,y:enemy.y,vx:Math.cos(a2)*s2,vy:Math.sin(a2)*s2,life:rand(150,450),maxLife:450,color:'#cc1111',size:rand(2,5)})}
   STATE.comboCount++;STATE.comboTimer=1500;
   if(STATE.comboCount>=10&&STATE.comboCount%10===0)spawnFloatText(enemy.x,enemy.y-20,STATE.comboCount+' COMBO!','#ffd700');
   if(enemy.type==='boss'){
@@ -548,7 +579,7 @@ function updateDrops(dt){
     if(d2<pr){
       if(d.type==='gold'){STATE.player.gold+=d.value;STATE.stats.totalGold+=d.value;sfxGold()}
       else if(d.type==='xp'){STATE.player.xp+=d.value;checkLevelUp()}
-      else if(d.type==='skill'){triggerUpgrade(true)}
+      else if(d.type==='skill'){STATE.pendingUpgrades++;showUpgradePanel()}
       STATE.drops.splice(i,1);continue;
     }
     if(d.life<=0)STATE.drops.splice(i,1);
@@ -556,27 +587,42 @@ function updateDrops(dt){
 }
 
 /* ============================================================
-   升级系统 (16种技能)
+   升级系统 — 自动基础属性 + 右下悬浮技能面板
    ============================================================ */
-function checkLevelUp(){const p=STATE.player;while(p.xp>=p.xpToNext){p.xp-=p.xpToNext;p.level++;p.xpToNext=CONFIG.xpToLevel(p.level);triggerUpgrade(false)}}
-function triggerUpgrade(instant){
-  if(instant){STATE.pendingUpgrades++;return}
-  if(STATE.screen==='upgrade'){STATE.pendingUpgrades++;return}
-  STATE.screen='upgrade';
+// 每级自动获得的基础属性
+const LEVEL_BASE_BONUS={atk:0.8,maxHp:3};
+function checkLevelUp(){
+  const p=STATE.player;
+  while(p.xp>=p.xpToNext){
+    p.xp-=p.xpToNext;p.level++;p.xpToNext=CONFIG.xpToLevel(p.level);
+    // 自动加基础属性
+    p.atk+=LEVEL_BASE_BONUS.atk;
+    p.maxHp+=LEVEL_BASE_BONUS.maxHp;p.hp=Math.min(p.hp+LEVEL_BASE_BONUS.maxHp,p.maxHp);
+    // 队列技能选择
+    STATE.pendingUpgrades++;showUpgradePanel();
+  }
+}
+function showUpgradePanel(){
+  if(STATE.upgradePanelVisible)return;
+  STATE.upgradePanelVisible=true;
   const pool=[...CONFIG.UPGRADE_POOL],choices=[];
   for(let i=0;i<3&&pool.length>0;i++){const idx=randInt(0,pool.length-1);choices.push(pool[idx]);pool.splice(idx,1)}
-  STATE.upgradeChoices=choices;renderUpgradeModal();sfxLevelUp();
+  STATE.upgradeChoices=choices;
+  renderUpgradePanel();
+  DOM.upgradePanel.classList.add('active');
+  sfxLevelUp();
   spawnParticles(STATE.player.x,STATE.player.y,'#ffd700',20);
 }
-function renderUpgradeModal(){
+function renderUpgradePanel(){
+  const pending=STATE.pendingUpgrades;
+  DOM.upPending.textContent=pending>1?`(${pending}次待选)`:'';
   DOM.upgradeCards.innerHTML=STATE.upgradeChoices.map(c=>{
     let vt;
     if(c.id==='atkSpd')vt='-'+c.min+'~'+c.max+c.unit;
     else if(c.unit==='%'||c.unit==='/s')vt='+'+c.min+'~'+c.max+c.unit;
     else vt='+'+(c.id==='speed'?c.min:c.min)+'~'+c.max+c.unit;
-    return`<div class="upgrade-card" onclick="selectUpgrade('${c.id}')"><div class="uc-icon">${c.icon}</div><div class="uc-name">${c.name}</div><div class="uc-value">${vt}</div><div class="uc-desc">${c.desc.replace('\\n','<br>')}</div></div>`;
+    return`<div class="up-card" onclick="selectUpgrade('${c.id}')"><div class="uc-icon">${c.icon}</div><div class="uc-name">${c.name}</div><div class="uc-value">${vt}</div><div class="uc-desc">${c.desc.replace('\\n','<br>')}</div></div>`;
   }).join('');
-  DOM.modalUpgrade.classList.add('active');
 }
 function selectUpgrade(uid){
   const p=STATE.player,def=CONFIG.UPGRADE_POOL.find(u=>u.id===uid);if(!def)return;
@@ -599,8 +645,14 @@ function selectUpgrade(uid){
     case'goldBonus':p.goldBonus+=Math.floor(val);break;
     case'pickupRange':p.pickupRange+=Math.floor(val);break;
   }
-  if(STATE.pendingUpgrades>0){STATE.pendingUpgrades--;triggerUpgrade(true)}
-  else{DOM.modalUpgrade.classList.remove('active');STATE.screen='playing';lastTime=performance.now()}
+  STATE.pendingUpgrades--;
+  if(STATE.pendingUpgrades>0){
+    const pool=[...CONFIG.UPGRADE_POOL],choices=[];
+    for(let i=0;i<3&&pool.length>0;i++){const idx=randInt(0,pool.length-1);choices.push(pool[idx]);pool.splice(idx,1)}
+    STATE.upgradeChoices=choices;renderUpgradePanel();sfxLevelUp();
+  }else{
+    DOM.upgradePanel.classList.remove('active');STATE.upgradePanelVisible=false;
+  }
   updateHUD();
 }
 
@@ -625,8 +677,15 @@ function render(){
   ctx.strokeStyle='rgba(255,50,50,0.5)';ctx.lineWidth=4;ctx.strokeRect(0,0,WW,WH);
   ctx.restore();
   if(STATE.bossFlash>0){ctx.fillStyle=`rgba(255,0,0,${STATE.bossFlash/400*0.18})`;ctx.fillRect(0,0,VW,VH)}
-  const v=ctx.createRadialGradient(VW/2,VH/2,VW*0.3,VW/2,VH/2,VW*0.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,0.45)');ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);
-  if(STATE.wave.transitioning){ctx.fillStyle='#fff';ctx.font='bold 30px "Press Start 2P","Courier New",monospace';ctx.textAlign='center';ctx.globalAlpha=0.9;ctx.fillText('WAVE '+STATE.wave.number,VW/2,VH/2);ctx.globalAlpha=1}
+  // 恐怖闪烁效果 (12波后)
+  if(STATE.horrorFlicker>0&&STATE.wave.number>=12){ctx.fillStyle=`rgba(0,0,0,${STATE.horrorFlicker/250*0.55})`;ctx.fillRect(0,0,VW,VH)}
+  // 低血量红色警示
+  const hpPctV=STATE.player.hp/STATE.player.maxHp;
+  if(hpPctV<0.3){ctx.fillStyle=`rgba(255,0,0,${(0.3-hpPctV)*0.35})`;ctx.fillRect(0,0,VW,VH)}
+  // 暗角效果 - 后期波次更暗
+  const horrorVignette=STATE.wave.number>=15?0.75:STATE.wave.number>=10?0.58:0.45;
+  const v=ctx.createRadialGradient(VW/2,VH/2,VW*0.3,VW/2,VH/2,VW*0.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,`rgba(0,0,0,${horrorVignette})`);ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);
+  if(STATE.wave.transitioning){const isFinal=STATE.wave.number===CONFIG.TOTAL_WAVES;ctx.fillStyle=isFinal?'#ff4444':'#fff';ctx.font='bold 30px "Press Start 2P","Courier New",monospace';ctx.textAlign='center';ctx.globalAlpha=0.9;ctx.fillText((isFinal?'FINAL ':'')+'WAVE '+STATE.wave.number,VW/2,VH/2);if(isFinal){ctx.fillStyle='#ffaa00';ctx.font='bold 14px "Press Start 2P","Courier New",monospace';ctx.fillText('魔王BOSS战!',VW/2,VH/2+35)}ctx.globalAlpha=1}
   // BOSS血条(金色)
   const boss=STATE.enemies.find(e=>e.type==='boss');
   if(boss){const bw=400,bh=18,bx=(VW-bw)/2,by=10;ctx.fillStyle='#111';ctx.fillRect(bx-2,by-2,bw+4,bh+4);ctx.fillStyle='#2a1a00';ctx.fillRect(bx,by,bw,bh);const hpPct=boss.hp/boss.maxHp;const grad=ctx.createLinearGradient(bx,0,bx+bw*hpPct,0);grad.addColorStop(0,'#ffd700');grad.addColorStop(1,'#ff8c00');ctx.fillStyle=grad;ctx.fillRect(bx,by,bw*hpPct,bh);ctx.strokeStyle='#aa8800';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);ctx.fillStyle='#000';ctx.font='bold 11px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS  '+Math.ceil(boss.hp)+' / '+boss.maxHp,VW/2,by+bh-3)}
@@ -638,6 +697,11 @@ function drawBackground(cam){
   if(STATE.bgLoaded&&STATE.bgImage){ctx.drawImage(STATE.bgImage,0,0,WW,WH)}
   else if(STATE.bgTile){const VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H,iw=400,ih=300,sx=Math.floor(cam.x/iw)*iw,sy=Math.floor(cam.y/ih)*ih;for(let tx=sx;tx<cam.x+VW+iw;tx+=iw)for(let ty=sy;ty<cam.y+VH+ih;ty+=ih)ctx.drawImage(STATE.bgTile,tx,ty)}
   else{ctx.fillStyle='#3d6a2a';ctx.fillRect(cam.x,cam.y,CONFIG.VIEW_W,CONFIG.VIEW_H)}
+  // 恐怖氛围: 12波后背景变暗
+  if(STATE.wave.number>=12){
+    const darkAlpha=Math.min(0.4,(STATE.wave.number-12)*0.06);
+    ctx.fillStyle=`rgba(0,0,0,${darkAlpha})`;ctx.fillRect(cam.x,cam.y,CONFIG.VIEW_W,CONFIG.VIEW_H);
+  }
 }
 function drawDrops(){for(const d of STATE.drops){const alpha=Math.min(1,d.life/500);ctx.globalAlpha=alpha;if(d.type==='skill'){ctx.shadowColor='#ffd700';ctx.shadowBlur=16;ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(d.x,d.y,d.radius,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.strokeStyle='#ff8c00';ctx.lineWidth=2;ctx.beginPath();ctx.arc(d.x,d.y,d.radius*0.5,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText('★',d.x,d.y+3);ctx.shadowBlur=0}else if(d.type==='gold'){ctx.shadowColor='#ffd700';ctx.shadowBlur=12;ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(d.x,d.y,d.radius,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(d.x-1,d.y-1,d.radius*0.35,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}else{ctx.shadowColor='#4da6ff';ctx.shadowBlur=10;ctx.fillStyle='#5badff';ctx.beginPath();ctx.arc(d.x,d.y,d.radius-1,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(d.x,d.y,d.radius*0.3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}ctx.globalAlpha=1}}
 
@@ -741,6 +805,33 @@ function initSprites(){
   for(let y=0;y<data.length;y++)for(let x=0;x<data[y].length;x++){const i=parseInt(data[y][x],16);if(i&&pal[i]){t.fillStyle=pal[i];t.fillRect(x*PX,y*PX,PX,PX)}}
   SPRITES.mage=c;SPRITES.mageW=40;SPRITES.mageH=48}
 
+  // 幽灵 (恐怖怪) - 半透明鬼魂
+  {const c=document.createElement('canvas');c.width=44;c.height=48;const t=c.getContext('2d');
+  const PX=2,data=[
+  '......11111111......',
+  '.....1222222221.....',
+  '....123333333321....',
+  '...1233444443321...',
+  '..12344566544321..',
+  '..12345677654321..',
+  '.123345666543321.',
+  '.123344444433321.',
+  '.122334444433221.',
+  '.122333444333221.',
+  '.122333..3333221.',
+  '.122333..3333221.',
+  '.122233..3332221.',
+  '..122333333221..',
+  '..122222322221..',
+  '...1222222221...',
+  '....12233221....',
+  '....12233221....',
+  '....12233221....',
+  '.....111111.....',
+  ];const pal=[null,'#1a3a3a','#2a5a5a','#3a7a7a','#55aaaa','#ffffff','#111','#88dddd','#66cccc'];
+  for(let y=0;y<data.length;y++)for(let x=0;x<data[y].length;x++){const i=parseInt(data[y][x],16);if(i&&pal[i]){t.fillStyle=pal[i];t.fillRect(x*PX,y*PX,PX,PX)}}
+  SPRITES.ghost=c;SPRITES.ghostW=44;SPRITES.ghostH=48}
+
   // 恶魔BOSS - 大型红魔
   {const c=document.createElement('canvas');c.width=64;c.height=64;const t=c.getContext('2d');
   const PX=2,data=[
@@ -794,6 +885,7 @@ function drawEnemy(e){
     case'fast':spr=SPRITES.bat;sprW=SPRITES.batW;sprH=SPRITES.batH;break;
     case'tank':spr=SPRITES.golem;sprW=SPRITES.golemW;sprH=SPRITES.golemH;break;
     case'ranged':spr=SPRITES.mage;sprW=SPRITES.mageW;sprH=SPRITES.mageH;break;
+    case'ghost':spr=SPRITES.ghost;sprW=SPRITES.ghostW;sprH=SPRITES.ghostH;break;
     default:spr=SPRITES.slime;sprW=SPRITES.slimeW;sprH=SPRITES.slimeH;
   }
   // BOSS 光环
@@ -805,12 +897,19 @@ function drawEnemy(e){
     ctx.fillStyle='#fff';ctx.font='bold 10px "Press Start 2P",monospace';ctx.textAlign='center';
     ctx.fillText('BOSS',e.x,e.y-r-20);
   }
+  // 幽灵视觉效果 - 相位闪烁
+  if(e.type==='ghost'){
+    const phased=e.phaseTimer<1400;
+    ctx.globalAlpha=phased?0.2+Math.sin(performance.now()/70)*0.15:0.65;
+    ctx.shadowColor='#88ffff';ctx.shadowBlur=phased?20:8;
+  }
   // 绘制精灵图
   const scale=sc/Math.max(sprW,sprH);
   const dx=e.x-(sprW*scale)/2,dy=e.y-(sprH*scale)/2;
   ctx.imageSmoothingEnabled=false;
   ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);
   if(flash){ctx.globalAlpha=0.45;ctx.fillStyle='#fff';ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale)}
+  if(e.type==='ghost'){ctx.globalAlpha=1;ctx.shadowBlur=0}
   ctx.imageSmoothingEnabled=true;
   // 血条 (非BOSS)
   if(e.type!=='boss'&&e.hp<e.maxHp){
@@ -866,7 +965,7 @@ function drawMinimap(){const mw=120,mh=120,WW=CONFIG.WORLD_W,WH=CONFIG.WORLD_H,s
    ============================================================ */
 function updateHUD(){
   const p=STATE.player,diff=getDifficultyMult();
-  DOM.hudWave.textContent=STATE.wave.number;DOM.hudKills.textContent=STATE.stats.kills;
+  DOM.hudWave.textContent=STATE.wave.number+'/'+CONFIG.TOTAL_WAVES;DOM.hudKills.textContent=STATE.stats.kills;
   DOM.hudGold.textContent=p.gold;DOM.hudLv.textContent=p.level;DOM.hudLvTop.textContent=p.level;
   DOM.hudAtk.textContent=effectiveAtk();DOM.hudSpd.textContent=p.speed.toFixed(0);DOM.hudCd.textContent=(p.atkSpd/1000).toFixed(2);
   DOM.hudDiff.textContent=diff>1?'难度x'+diff.toFixed(1):'';
@@ -881,19 +980,21 @@ function updateHUD(){
 /* ============================================================
    场景管理
    ============================================================ */
-function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalUpgrade.classList.remove('active');DOM.modalGameover.classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
+function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalGameover.classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
 function startGame(){resetState();STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
 function restartGame(){stopMusic();startGame()}
 function togglePause(){if(STATE.screen!=='playing')return;STATE.paused=!STATE.paused;if(!STATE.paused)lastTime=performance.now();updateHUD()}
+function toggleDebug(){STATE.debugMode=!STATE.debugMode;DOM.btnDebug.textContent=STATE.debugMode?'🐛 测试ON':'🐛 测试';DOM.btnDebug.style.background=STATE.debugMode?'rgba(255,50,50,0.3)':'';DOM.btnDebug.style.borderColor=STATE.debugMode?'#ff0000':'#ff4444'}
 function gameOver(){STATE.screen='gameover';stopMusic();sfxBossDeath();const p=STATE.player;DOM.gameoverStats.innerHTML=`存活波次: <span>${STATE.wave.number}</span><br>击杀总数: <span>${STATE.stats.kills}</span><br>精英击杀: <span>${STATE.stats.eliteKills}</span><br>BOSS击杀: <span>${STATE.stats.bossKills}</span><br>获得金币: <span>${STATE.stats.totalGold}</span><br>角色等级: <span>${p.level}</span><br>最终ATK: <span>${effectiveAtk()}</span> &nbsp; SPD: <span>${p.speed.toFixed(0)}</span><br>破甲: <span>${p.armorPen}%</span> 连击: <span>${p.comboChance}%</span> 毒素: <span>${p.poisonDmg}</span>/s<br>斩杀: <span>${p.executeBonus}%</span> 吸血: <span>${p.lifesteal}%</span> 反伤: <span>${p.reflect}%</span><br>减伤: <span>${p.damageReduction}%</span> 护盾: <span>${p.maxShield}</span>`;showModal('modal-gameover')}
+function victory(){STATE.screen='gameover';stopMusic();sfxBossDeath();STATE.stats.bossKills++;STATE.wave.bossActive=false;spawnFloatText(STATE.player.x,STATE.player.y-24,'魔王已灭!','#ffd700');triggerShake(22,900);const p=STATE.player;DOM.gameoverStats.innerHTML=`<span style="color:#ffd700;font-size:16px">🏆 胜利! 所有20波已清除! 🏆</span><br><br>击杀总数: <span>${STATE.stats.kills}</span><br>精英击杀: <span>${STATE.stats.eliteKills}</span><br>BOSS击杀: <span>${STATE.stats.bossKills}</span><br>获得金币: <span>${STATE.stats.totalGold}</span><br>角色等级: <span>${p.level}</span><br>最终ATK: <span>${effectiveAtk()}</span> &nbsp; SPD: <span>${p.speed.toFixed(0)}</span><br>破甲: <span>${p.armorPen}%</span> 连击: <span>${p.comboChance}%</span> 毒素: <span>${p.poisonDmg}</span>/s<br>斩杀: <span>${p.executeBonus}%</span> 吸血: <span>${p.lifesteal}%</span> 反伤: <span>${p.reflect}%</span><br>减伤: <span>${p.damageReduction}%</span> 护盾: <span>${p.maxShield}</span>`;showModal('modal-gameover')}
 function resetState(){
   STATE.screen='playing';STATE.paused=false;
   STATE.player={...CONFIG.PLAYER,x:CONFIG.WORLD_W/2,y:CONFIG.WORLD_H/2};
   STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];
   STATE.wave={number:1,totalEnemies:5,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:0,spawnInterval:350,waveDelay:1500,waveDelayTimer:0,transitioning:false};
   STATE.stats={kills:0,bossKills:0,totalGold:0,eliteKills:0};STATE.attackCooldown=0;STATE.invincibleTimer=0;
-  STATE.upgradeChoices=[];STATE.pendingUpgrades=0;
-  STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.comboCount=0;STATE.comboTimer=0;
+  STATE.upgradeChoices=[];STATE.pendingUpgrades=0;STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
+  STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;
 }
 
 /* ============================================================
@@ -903,12 +1004,17 @@ let lastTime=0;
 function gameLoop(ts){
   requestAnimationFrame(gameLoop);
   if(STATE.screen==='start'||STATE.screen==='gameover')return;
-  if(STATE.screen==='upgrade'){render();return}
   if(STATE.paused)return;
   let dt=ts-lastTime;if(dt>50)dt=50;lastTime=ts;
   if(STATE.screen==='playing')update(dt);
   if(STATE.screenShake.duration>0)STATE.screenShake.duration-=dt;
   if(STATE.bossFlash>0)STATE.bossFlash-=dt;
+  // 恐怖效果计时器
+  if(STATE.wave.number>=12){
+    STATE.horrorTimer-=dt;
+    if(STATE.horrorTimer<=0){STATE.horrorTimer=rand(3000,12000);STATE.horrorFlicker=rand(80,250)}
+  }
+  if(STATE.horrorFlicker>0)STATE.horrorFlicker-=dt;
   if(STATE.comboTimer>0){STATE.comboTimer-=dt;if(STATE.comboTimer<=0)STATE.comboCount=0}
   render();updateHUD();
 }
@@ -941,6 +1047,15 @@ function update(dt){
         e.shootTimer=CONFIG.ENEMY_TYPES.ranged.shootCd+rand(-300,300);
         const a=Math.atan2(p.y-e.y,p.x-e.x);
         STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*CONFIG.ENEMY_PROJECTILE.speed,vy:Math.sin(a)*CONFIG.ENEMY_PROJECTILE.speed,damage:e.atk,radius:CONFIG.ENEMY_PROJECTILE.radius,life:2000,sourceId:e.id,color:'#e040e0'});
+      }
+    }else if(e.type==='ghost'){
+      // 幽灵AI: 相位闪烁 + 追踪
+      if(d>0.5){e.x+=dx*e.speed*ds;e.y+=dy*e.speed*ds}
+      e.phaseTimer-=dt;
+      if(e.phaseTimer<=0)e.phaseTimer=3800;
+      // 相位时减速飘移
+      if(e.phaseTimer<1400){
+        e.x+=rand(-1,1)*0.6;e.y+=rand(-1,1)*0.6;
       }
     }else if(e.type==='boss'){
       // BOSS智能: 扇形弹幕 + 冲刺 + 低血狂暴
