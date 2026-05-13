@@ -1034,8 +1034,6 @@ function drawPlayer(){
   const p=STATE.player,r=p.radius,lv=p.level;
   // 脚下阴影标记
   ctx.fillStyle='rgba(0,0,0,0.35)';ctx.beginPath();ctx.ellipse(p.x,p.y+r*0.85,r*1.2,r*0.4,0,0,Math.PI*2);ctx.fill();
-  const glowGrad=ctx.createRadialGradient(p.x,p.y,r*0.3,p.x,p.y,r*2.5);glowGrad.addColorStop(0,'rgba(255,255,255,0.15)');glowGrad.addColorStop(0.5,'rgba(78,205,196,0.06)');glowGrad.addColorStop(1,'rgba(78,205,196,0)');
-  ctx.fillStyle=glowGrad;ctx.beginPath();ctx.arc(p.x,p.y,r*2.5,0,Math.PI*2);ctx.fill();
   // 精灵图绘制 (方向图)
   const frames=SPRITES.playerFrames;
   if(frames&&STATE.playerSpriteReady&&frames[STATE.playerFacing]&&frames[STATE.playerFacing][0]){
@@ -1454,7 +1452,7 @@ function initPlayerSprite(){
       const imgData=t.getImageData(0,0,fw,fh);
       for(let i=0;i<imgData.data.length;i+=4){
         const dr=imgData.data[i]-bgR,dg=imgData.data[i+1]-bgG,db=imgData.data[i+2]-bgB;
-        if(Math.abs(dr)<28&&Math.abs(dg)<28&&Math.abs(db)<28){imgData.data[i+3]=0}else{imgData.data[i]=Math.round(imgData.data[i]*0.72);imgData.data[i+1]=Math.round(imgData.data[i+1]*0.72);imgData.data[i+2]=Math.round(imgData.data[i+2]*0.72)}
+        if(Math.abs(dr)<28&&Math.abs(dg)<28&&Math.abs(db)<28){imgData.data[i+3]=0}else{let r=Math.min(255,Math.round(imgData.data[i]*1.60));let g=Math.min(255,Math.round(imgData.data[i+1]*1.60));let b=Math.min(255,Math.round(imgData.data[i+2]*1.60));const gray=(r+g+b)/3;r=Math.min(255,Math.round(gray+(r-gray)*1.25));g=Math.min(255,Math.round(gray+(g-gray)*1.25));b=Math.min(255,Math.round(gray+(b-gray)*1.25));imgData.data[i]=r;imgData.data[i+1]=g;imgData.data[i+2]=b}
       }
       t.putImageData(imgData,0,0);
       SPRITES.playerFrames[d.row]=[{canvas:c,width:fw,height:fh}];
