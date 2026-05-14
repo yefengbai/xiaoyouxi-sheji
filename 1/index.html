@@ -120,7 +120,7 @@ canvas{
     <span class="lv-badge">Lv.<span class="lv-num" id="hud-lv-top">1</span></span>
     <span class="boss-alert" id="boss-alert">⚠ BOSS ⚠</span>
   </div>
-  <canvas id="game-canvas" width="800" height="600"></canvas>
+  <canvas id="game-canvas" width="960" height="720"></canvas>
   <canvas id="minimap" width="120" height="120"></canvas>
   <div id="bottom-bar" class="pixel-panel">
     <div class="bar-row">
@@ -230,7 +230,7 @@ canvas{
    CONFIG
    ============================================================ */
 const CONFIG = {
-  WORLD_W:2000,WORLD_H:2000,VIEW_W:800,VIEW_H:600,
+  WORLD_W:2000,WORLD_H:2000,VIEW_W:1152,VIEW_H:864,
 
   PLAYER:{
     hp:100,maxHp:100,atk:10,speed:260,atkSpd:650,radius:13,invincibleMs:300,
@@ -484,7 +484,7 @@ function effectiveAtk(){const p=STATE.player;return Math.floor(((p.atk+p.level*3
 function getDifficultyMult(){return 1+Math.floor((STATE.wave.number-1)/CONFIG.DIFFICULTY.interval)*CONFIG.DIFFICULTY.statBoost}
 function getWorldGradient(x,y){const cx=CONFIG.WORLD_W/2,cy=CONFIG.WORLD_H/2,maxD=Math.hypot(CONFIG.WORLD_W/2,CONFIG.WORLD_H/2);return 1+(dist(x,y,cx,cy)/maxD)*1.5}
 function getMapWH(){if(STATE.currentMap==='maze'&&STATE.maze){const m=STATE.maze;return{W:m.cols*m.cell,H:m.rows*m.cell}}return{W:CONFIG.WORLD_W,H:CONFIG.WORLD_H}}
-function getCamera(){const p=STATE.player,VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H,wh=getMapWH();return{x:clamp(p.x-VW/2,0,wh.W-VW),y:clamp(p.y-VH/2,0,wh.H-VH)}}
+function getCamera(){const p=STATE.player,VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H;return{x:p.x-VW/2,y:p.y-VH/2}}
 
 function triggerShake(i,d){STATE.screenShake.intensity=Math.max(STATE.screenShake.intensity,i);STATE.screenShake.duration=Math.max(STATE.screenShake.duration,d)}
 
@@ -535,7 +535,7 @@ function createBoss(){
   const atk=Math.floor(CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8));
   return{
     id:++_eid,x:edgePos().x,y:edgePos().y,
-    hp,maxHp:hp,atk,speed:CONFIG.BOSS.speed,radius:w===15?84:CONFIG.BOSS.radius,
+    hp,maxHp:hp,atk,speed:CONFIG.BOSS.speed,radius:w===15?200:CONFIG.BOSS.radius,
     type:'boss',color:CONFIG.BOSS.color,glowColor:CONFIG.BOSS.glowColor,
     xpValue:Math.floor(CONFIG.ENEMY_TYPES.normal.xp*diff*CONFIG.BOSS.xpMult),
     goldValue:Math.floor(CONFIG.ENEMY_TYPES.normal.gold*diff*CONFIG.BOSS.goldMult),
@@ -784,9 +784,13 @@ function updateParticles(dt){const ds=dt/1000;for(let i=STATE.particles.length-1
    ============================================================ */
 function render(){
   const VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H,cam=getCamera();STATE.camera=cam;
-  ctx.clearRect(0,0,VW,VH);
+  const CW=960,CH=720;
+  ctx.clearRect(0,0,CW,CH);
   let sx=0,sy=0;const sh=STATE.screenShake;if(sh.duration>0){sx=rand(-sh.intensity,sh.intensity);sy=rand(-sh.intensity,sh.intensity)}
-  ctx.save();ctx.translate(-cam.x+sx,-cam.y+sy);
+  ctx.save();
+  const scX=CW/VW,scY=CH/VH;
+  ctx.scale(scX,scY);
+  ctx.translate(-cam.x+sx/scX,-cam.y+sy/scY);
   if(STATE.currentMap==='maze')drawMazeBg(cam);else drawBackground(cam);
   drawDrops();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();
   const wh=getMapWH(),WW=wh.W,WH=wh.H;
@@ -795,22 +799,22 @@ function render(){
   if(STATE.currentMap==='field'&&STATE.player.level===10)drawPortal(CONFIG.PORTAL_POS.x,CONFIG.PORTAL_POS.y,false);
   else if(STATE.currentMap==='maze'){const c=CONFIG.MAZE_CELL,rc=CONFIG.RETURN_CELL;drawPortal(rc.col*c+c/2,rc.row*c+c/2,true)}
   ctx.restore();
-  if(STATE.bossFlash>0){ctx.fillStyle=`rgba(255,0,0,${STATE.bossFlash/400*0.18})`;ctx.fillRect(0,0,VW,VH)}
+  if(STATE.bossFlash>0){ctx.fillStyle=`rgba(255,0,0,${STATE.bossFlash/400*0.18})`;ctx.fillRect(0,0,CW,CH)}
   // 恐怖闪烁效果 (12波后)
-  if(STATE.horrorFlicker>0&&STATE.wave.number>=12){ctx.fillStyle=`rgba(0,0,0,${STATE.horrorFlicker/250*0.55})`;ctx.fillRect(0,0,VW,VH)}
+  if(STATE.horrorFlicker>0&&STATE.wave.number>=12){ctx.fillStyle=`rgba(0,0,0,${STATE.horrorFlicker/250*0.55})`;ctx.fillRect(0,0,CW,CH)}
   // 低血量红色警示
   const hpPctV=STATE.player.hp/STATE.player.maxHp;
-  if(hpPctV<0.3){ctx.fillStyle=`rgba(255,0,0,${(0.3-hpPctV)*0.35})`;ctx.fillRect(0,0,VW,VH)}
+  if(hpPctV<0.3){ctx.fillStyle=`rgba(255,0,0,${(0.3-hpPctV)*0.35})`;ctx.fillRect(0,0,CW,CH)}
   // 暗角效果 - 后期波次更暗
   const horrorVignette=STATE.wave.number>=15?0.75:STATE.wave.number>=10?0.58:0.45;
-  const v=ctx.createRadialGradient(VW/2,VH/2,VW*0.3,VW/2,VH/2,VW*0.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,`rgba(0,0,0,${horrorVignette})`);ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);
-  if(STATE.wave.transitioning){const isFinal=STATE.wave.number===CONFIG.TOTAL_WAVES;ctx.fillStyle=isFinal?'#ff4444':'#fff';ctx.font='bold 30px "Press Start 2P","Courier New",monospace';ctx.textAlign='center';ctx.globalAlpha=0.9;ctx.fillText((isFinal?'FINAL ':'')+'WAVE '+STATE.wave.number,VW/2,VH/2);if(isFinal){ctx.fillStyle='#ffaa00';ctx.font='bold 14px "Press Start 2P","Courier New",monospace';ctx.fillText('魔王BOSS战!',VW/2,VH/2+35)}ctx.globalAlpha=1}
+  const v=ctx.createRadialGradient(CW/2,CH/2,CW*0.3,CW/2,CH/2,CW*0.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,`rgba(0,0,0,${horrorVignette})`);ctx.fillStyle=v;ctx.fillRect(0,0,CW,CH);
+  if(STATE.wave.transitioning){const isFinal=STATE.wave.number===CONFIG.TOTAL_WAVES;ctx.fillStyle=isFinal?'#ff4444':'#fff';ctx.font='bold 30px "Press Start 2P","Courier New",monospace';ctx.textAlign='center';ctx.globalAlpha=0.9;ctx.fillText((isFinal?'FINAL ':'')+'WAVE '+STATE.wave.number,CW/2,CH/2);if(isFinal){ctx.fillStyle='#ffaa00';ctx.font='bold 14px "Press Start 2P","Courier New",monospace';ctx.fillText('魔王BOSS战!',CW/2,CH/2+35)}ctx.globalAlpha=1}
   // BOSS血条(金色)
   const boss=STATE.enemies.find(e=>e.type==='boss');
-  if(boss){const bw=400,bh=18,bx=(VW-bw)/2,by=10;ctx.fillStyle='#111';ctx.fillRect(bx-2,by-2,bw+4,bh+4);ctx.fillStyle='#2a1a00';ctx.fillRect(bx,by,bw,bh);const hpPct=boss.hp/boss.maxHp;const grad=ctx.createLinearGradient(bx,0,bx+bw*hpPct,0);grad.addColorStop(0,'#ffd700');grad.addColorStop(1,'#ff8c00');ctx.fillStyle=grad;ctx.fillRect(bx,by,bw*hpPct,bh);ctx.strokeStyle='#aa8800';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);ctx.fillStyle='#000';ctx.font='bold 11px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS  '+Math.ceil(boss.hp)+' / '+boss.maxHp,VW/2,by+bh-3)}
+  if(boss){const bw=400,bh=18,bx=(CW-bw)/2,by=10;ctx.fillStyle='#111';ctx.fillRect(bx-2,by-2,bw+4,bh+4);ctx.fillStyle='#2a1a00';ctx.fillRect(bx,by,bw,bh);const hpPct=boss.hp/boss.maxHp;const grad=ctx.createLinearGradient(bx,0,bx+bw*hpPct,0);grad.addColorStop(0,'#ffd700');grad.addColorStop(1,'#ff8c00');ctx.fillStyle=grad;ctx.fillRect(bx,by,bw*hpPct,bh);ctx.strokeStyle='#aa8800';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);ctx.fillStyle='#000';ctx.font='bold 11px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS  '+Math.ceil(boss.hp)+' / '+boss.maxHp,CW/2,by+bh-3)}
   drawMinimap();
   // 血魔之力降临大字体
-  if(STATE.bloodTextTimer>0){const a=Math.min(1,STATE.bloodTextTimer/1000);ctx.fillStyle=`rgba(255,20,40,${a})`;ctx.font='bold 36px "Press Start 2P",monospace';ctx.textAlign='center';ctx.shadowColor='#ff0000';ctx.shadowBlur=20;ctx.fillText('血魔之力降临',VW/2,VH/2-40);ctx.shadowBlur=0;STATE.bloodTextTimer-=16}
+  if(STATE.bloodTextTimer>0){const a=Math.min(1,STATE.bloodTextTimer/1000);ctx.fillStyle=`rgba(255,20,40,${a})`;ctx.font='bold 36px "Press Start 2P",monospace';ctx.textAlign='center';ctx.shadowColor='#ff0000';ctx.shadowBlur=20;ctx.fillText('血魔之力降临',CW/2,CH/2-40);ctx.shadowBlur=0;STATE.bloodTextTimer-=16}
 }
 
 function drawBackground(cam){
@@ -1025,7 +1029,7 @@ function drawEnemy(e){
     ctx.shadowColor='#88ffff';ctx.shadowBlur=phased?20:8;
   }
   // 绘制精灵图
-  const sc2=wave15?sc*3.5:sc;
+  const sc2=wave15?sc*1.2:sc;
   const scale=sc2/Math.max(sprW,sprH);
   const dx=e.x-(sprW*scale)/2,dy=e.y-(sprH*scale)/2;
   if(wave15){
@@ -1046,6 +1050,8 @@ function drawEnemy(e){
   if(e.type==='ghost'){ctx.globalAlpha=1;ctx.shadowBlur=0}
   // wave15 BOSS 标签
   if(wave15){ctx.fillStyle='#ff4422';ctx.font='bold 12px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS',e.x,e.y-r-20)}
+  // DEBUG: 第15关BOSS碰撞圈可视化
+  if(wave15){ctx.strokeStyle='rgba(255,0,0,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(255,0,0,0.15)';ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill()}
   ctx.imageSmoothingEnabled=true;
   // 血条 (非BOSS)
   if(e.type!=='boss'&&e.hp<e.maxHp){
