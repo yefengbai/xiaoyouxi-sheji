@@ -535,7 +535,7 @@ function createBoss(){
   const isFinalBoss=w===CONFIG.TOTAL_WAVES;
   // BOSS HP随波次递增: 10波≈27000, 20波魔王=200000
   const hp=isFinalBoss?200000:w===10?15000:Math.floor(15000+w*1200);
-  const atk=Math.floor((CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8))*(w===10?0.6:1));
+  const atk=Math.floor((CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8))*(w===10?0.51:1));
   return{
     id:++_eid,x:edgePos().x,y:edgePos().y,
     hp,maxHp:hp,atk,speed:Math.floor(CONFIG.BOSS.speed*(w===10?0.7:1)),radius:w===15?200:w===10?126:CONFIG.BOSS.radius,
