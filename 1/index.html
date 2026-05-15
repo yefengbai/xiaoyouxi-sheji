@@ -1563,7 +1563,7 @@ function update(dt){
       // 移动追踪
       if(e._stormSpeed>0)e._stormSpeed-=dt;
       const spdMul2=e.isWave10Boss&&e.attackPhase===3?1.3:1;
-      if(!e.charging){if(d>0.5){e.x+=dx*e.speed*spdMul2*ds;e.y+=dy*e.speed*spdMul2*ds}}
+      if(!e.charging){if(d>0.5){if(e.isWave10Boss&&d<150){e.x-=dx*e.speed*0.5*ds;e.y-=dy*e.speed*0.5*ds}else{e.x+=dx*e.speed*spdMul2*ds;e.y+=dy*e.speed*spdMul2*ds}}}
       // 冲刺攻击 (独立于攻击循环)
       if(!e.charging){e.chargeTimer=(e.chargeTimer||0)-dt}
       if(e.charging){
