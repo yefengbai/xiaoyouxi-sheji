@@ -1597,6 +1597,7 @@ function update(dt){
               const a=ba+(i-3.5)*0.23;
               STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.85,vy:Math.sin(a)*spd*0.85,damage:Math.floor(e.atk*0.8),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2400,sourceId:e.id,color:'#44ccff'});
             }
+            spawnFloatText(e.x,e.y-50,'❄️ 冰锥扇射!','#44ccff');
           }else{
             e.shootTimer=(1600+rand(-300,300))*enrageMult;
             const ba=Math.atan2(leadY-e.y,leadX-e.x);
@@ -1677,6 +1678,7 @@ function update(dt){
               STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.55,vy:Math.sin(a)*spd*0.55,damage:Math.floor(e.atk*0.85),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2800,sourceId:e.id,color:'#aaddff'});
             }
             e._stormSpeed=1200;
+            spawnFloatText(e.x,e.y-50,'🌨️ 极寒风暴!','#66ddff');
           }else{
             e.shootTimer=(2400+rand(-400,400))*enrageMult;
             for(let i=0;i<3;i++){
