@@ -230,7 +230,7 @@ canvas{
    CONFIG
    ============================================================ */
 const CONFIG = {
-  WORLD_W:2000,WORLD_H:2000,FIRE_WORLD_W:5000,FIRE_WORLD_H:5000,VIEW_W:1152,VIEW_H:864,
+  WORLD_W:2000,WORLD_H:2000,FIRE_WORLD_W:5000,FIRE_WORLD_H:5000,VIEW_W:1152,VIEW_H:864,NARRATOR:{radius:18,speed:160,textCD:4000,stunDuration:2000},
 
   PLAYER:{
     hp:100,maxHp:100,atk:10,speed:260,atkSpd:650,radius:13,invincibleMs:300,
@@ -330,7 +330,7 @@ const STATE={
   comboCount:0,comboTimer:0,
   playerFacing:0,playerFrame:0,playerFrameTimer:0,playerSpriteReady:false,boss15SpriteReady:false,boss10SpriteReady:false,
   bgImage:null,bgLoaded:false,bgImgW:800,bgImgH:600,bgTile:null,fireMapBg:null,fireMapBgLoaded:false,fireMapBgW:5000,fireMapBgH:5000,
-  camera:{x:0,y:0},currentMap:'field',maze:null,portalGlow:0,bloodBuff:false,bloodTextTimer:0,mazeBossAlive:false,fireBuff:false,fireBuffTextTimer:0,fireSeed:null,
+  camera:{x:0,y:0},currentMap:'field',maze:null,portalGlow:0,bloodBuff:false,bloodTextTimer:0,mazeBossAlive:false,fireBuff:false,fireBuffTextTimer:0,fireSeed:null,narrator:null,narratorStun:0,narratorFakeDrops:[],narratorFakeEnemies:[],
   mapState:{field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}},
 };
 
@@ -498,7 +498,7 @@ function initInput(){
   DOM.canvas.addEventListener('mousemove',e=>{const r=DOM.canvas.getBoundingClientRect();STATE.mouse.x=(e.clientX-r.left)*(CONFIG.VIEW_W/r.width);STATE.mouse.y=(e.clientY-r.top)*(CONFIG.VIEW_H/r.height)});
   document.addEventListener('click',initAudio,{once:true});document.addEventListener('keydown',initAudio,{once:true});
 }
-function getInputDir(){const k=STATE.keys;let dx=0,dy=0;if(k['ArrowLeft']||k['KeyA']||k['a'])dx-=1;if(k['ArrowRight']||k['KeyD']||k['d'])dx+=1;if(k['ArrowUp']||k['KeyW']||k['w'])dy-=1;if(k['ArrowDown']||k['KeyS']||k['s'])dy+=1;if(dx!==0&&dy!==0){dx*=0.707;dy*=0.707}return{dx,dy}}
+function getInputDir(){const k=STATE.keys;let dx=0,dy=0;if(k['ArrowLeft']||k['KeyA']||k['a'])dx-=1;if(k['ArrowRight']||k['KeyD']||k['d'])dx+=1;if(k['ArrowUp']||k['KeyW']||k['w'])dy-=1;if(k['ArrowDown']||k['KeyS']||k['s'])dy+=1;if(dx!==0&&dy!==0){dx*=0.707;dy*=0.707}if(STATE._controlReverse>0){dx=-dx;dy=-dy}return{dx,dy}}
 
 /* ============================================================
    刷怪 — 精英/远程/世界梯度/难度递增/BOSS每10波
@@ -558,6 +558,45 @@ function initWave(n){
   if(n%CONFIG.BOSS_EVERY===0||n===15)w.spawnQueue.push('boss');
   // 随机打乱 (保持精英分散)
   for(let i=w.spawnQueue.length-1;i>0;i--){const j=randInt(0,i);if(w.spawnQueue[i]==='boss'||w.spawnQueue[j]==='boss')continue;const tmp=w.spawnQueue[i];w.spawnQueue[i]=w.spawnQueue[j];w.spawnQueue[j]=tmp}
+  initNarrator(n);
+}
+function initNarrator(wn){
+  const wh=getMapWH();STATE.narrator={x:wh.W/2+rand(-300,300),y:wh.H/2+rand(-200,200),text:'',textTimer:0,trickCD:0,trickInterval:wn<=3?6000:wn<=8?4500:wn<=12?3500:2800,stunned:0,wave:wn};
+  STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorStun=0;STATE.narratorPuddles=[];STATE.narratorStealGold=0;
+  const says={1:'欢迎来到这个世界!嘿嘿~',2:'那边的宝箱看起来不错哦!',3:'地板有点滑,小心脚下~',4:'你的方向感还好吗?',5:'敌人们,我来帮你们!',6:'谁是真的谁是假的呢?',7:'你的金币真好看,借我玩玩!',8:'来,大家回回血~',9:'嗖!传送的感觉如何?',10:'BOSS大人,请收下我的力量!',11:'镜子里的是谁?',12:'开箱有惊喜!',13:'兄弟们出来吧!',14:'此路不通,绕路吧~',15:'你休想找到火种入口!'};
+  STATE.narrator.text=says[wn]||'嘿嘿~';STATE.narrator.textTimer=3000;
+}
+function updateNarrator(dt){
+  if(!STATE.narrator||STATE.currentMap==='maze'||STATE.currentMap==='fireField')return;
+  const n=STATE.narrator;const p=STATE.player;const d=dist(n.x,n.y,p.x,p.y);
+  n.textTimer-=dt;n.trickCD-=dt;if(n.stunned>0)n.stunned-=dt;
+  if(n.stunned<=0){
+    if(d<250){const a=Math.atan2(n.y-p.y,n.x-p.x);n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*1.3*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*1.3*(dt/1000)}
+    else if(d>500){const a=Math.atan2(p.y-n.y,p.x-n.x);n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*0.7*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*0.7*(dt/1000)}
+    else{const a=Math.atan2(n.y-p.y,n.x-p.x)+Math.PI*0.5;n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*0.5*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*0.5*(dt/1000)}
+  }
+  const wh=getMapWH();n.x=clamp(n.x,30,wh.W-30);n.y=clamp(n.y,30,wh.H-30);
+  if(n.textTimer<=0&&n.stunned<=0){n.textTimer=CONFIG.NARRATOR.textCD;const quips={1:['快来追我呀~','这个送给你!','嘿嘿,捡起来看看?'],2:['大宝藏哦!','不去看看可惜了~'],3:['滑溜溜!','站不稳了吧~'],4:['左边?右边?','方向键坏了?'],5:['加油加油!','更强更强!'],6:['真真假假~','打我呀笨蛋~'],7:['金币哗啦啦~','还给你?才不!'],8:['绿光治疗!','满血复活!'],9:['到了没?','惊喜不惊喜?'],10:['BOSS无敌!','颤抖吧!'],11:['谁是真的?','打错了哦~'],12:['轰!','惊喜变惊吓!'],13:['人海战术!','兄弟们上!'],14:['过不去吧?','绕路绕路~'],15:['火种?不存在的!','放弃吧!']};const q=quips[n.wave]||['嘿嘿~','来抓我呀~'];n.text=q[Math.floor(Math.random()*q.length)];n.textTimer=CONFIG.NARRATOR.textCD}
+  for(let i=STATE.projectiles.length-1;i>=0;i--){const pr=STATE.projectiles[i];if(dist(pr.x,pr.y,n.x,n.y)<(n.radius||18)+pr.radius){STATE.projectiles.splice(i,1);n.stunned=CONFIG.NARRATOR.stunDuration;STATE.narratorStun=CONFIG.NARRATOR.stunDuration;n.text='啊啊!别打我!';n.textTimer=2000;spawnParticles(n.x,n.y,'#cc44ff',10);break}}
+  narratorTrick(dt);
+}
+function narratorTrick(dt){
+  const n=STATE.narrator;if(!n||n.stunned>0)return;const p=STATE.player;const wn=n.wave;
+  if(wn===1){if(n.trickCD<=0){n.trickCD=n.trickInterval;const fx=p.x+rand(-120,120),fy=p.y+rand(-120,120);STATE.narratorFakeDrops.push({x:fx,y:fy,life:8000,type:'gold'});if(STATE.narratorFakeDrops.length>4)STATE.narratorFakeDrops.shift()}}
+  if(wn===2){if(n.trickCD<=0){n.trickCD=n.trickInterval;if(STATE.narratorFakeDrops.length===0)STATE.narratorFakeDrops.push({x:p.x+rand(-200,200),y:p.y+rand(-200,200),life:15000,type:'skill',big:true})}}
+  if(wn===3){if(n.trickCD<=0){n.trickCD=2000;STATE.narratorPuddles.push({x:p.x+rand(-100,100),y:p.y+rand(-80,80),life:4000});if(STATE.narratorPuddles.length>3)STATE.narratorPuddles.shift()}}
+  if(wn===4){if(n.trickCD<=0){n.trickCD=n.trickInterval;STATE._controlReverse=1500}}
+  if(wn===5){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<400){e.speed=Math.floor(e.speed*1.4);e.atk=Math.floor(e.atk*1.3);spawnFloatText(e.x,e.y-20,'↑','#ff4444')}}}}
+  if(wn===6){if(n.trickCD<=0&&STATE.narratorFakeEnemies.length<3){n.trickCD=n.trickInterval;for(let i=0;i<3;i++){STATE.narratorFakeEnemies.push({x:p.x+rand(-300,300),y:p.y+rand(-300,300),life:10000,type:pickEnemyType(),vx:rand(-40,40),vy:rand(-40,40)})}}}
+  if(wn===7){if(n.trickCD<=0&&dist(n.x,n.y,p.x,p.y)<120){n.trickCD=n.trickInterval;const steal=Math.floor(p.gold*0.15);p.gold-=steal;STATE.narratorStealGold+=steal;n.text='偷了'+steal+'金币!';n.textTimer=2000}}
+  if(wn===8){if(n.trickCD<=0){n.trickCD=n.trickInterval*0.7;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<350){e.hp=Math.min(e.maxHp||e.hp*2,e.hp+(e.maxHp||e.hp)*0.08);spawnFloatText(e.x,e.y-20,'+','#44ff44')}}}}
+  if(wn===9){if(n.trickCD<=0){n.trickCD=n.trickInterval;const ta=rand(0,Math.PI*2),td=rand(250,450);STATE.player.x=p.x+Math.cos(ta)*td;STATE.player.y=p.y+Math.sin(ta)*td;const wh=getMapWH();STATE.player.x=clamp(STATE.player.x,20,wh.W-20);STATE.player.y=clamp(STATE.player.y,20,wh.H-20);STATE.invincibleTimer=300;spawnParticles(p.x,p.y,'#cc44ff',12)}}
+  if(wn===10){const boss=STATE.enemies.find(e=>e.type==='boss');if(boss&&n.trickCD<=0){n.trickCD=n.trickInterval;boss.speed=Math.floor(boss.speed*1.15);boss.atk=Math.floor(boss.atk*1.1);spawnFloatText(boss.x,boss.y-40,'旁白之力!','#cc44ff')}}
+  if(wn===11){if(n.trickCD<=0&&!STATE._doppelTimer){n.trickCD=n.trickInterval;STATE._doppel={x:p.x+rand(-150,150),y:p.y+rand(-150,150),life:6000};STATE._doppelTimer=6000}}
+  if(wn===12){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const d of STATE.drops){if(Math.random()<0.3){d.trap=true;d.color='#ff4444'}}}}
+  if(wn===13){if(n.trickCD<=0&&STATE.enemies.length<8){n.trickCD=n.trickInterval;for(let i=0;i<3;i++){STATE.enemies.push(createEnemy(pickEnemyType(),{x:p.x+rand(-350,350),y:p.y+rand(-350,350)}))}}}
+  if(wn===14){if(n.trickCD<=0){n.trickCD=3000;STATE.narratorWalls=STATE.narratorWalls||[];const wa=rand(0,Math.PI*2),wx=p.x+Math.cos(wa)*300,wy=p.y+Math.sin(wa)*300;STATE.narratorWalls.push({x:wx,y:wy,life:5000});if(STATE.narratorWalls.length>4)STATE.narratorWalls.shift()}}
+  if(wn===15){if(n.trickCD<=0){n.trickCD=n.trickInterval;const boss=STATE.enemies.find(e=>e.type==='boss');if(boss){boss.hp=Math.min(boss.maxHp,boss.hp+boss.maxHp*0.01);spawnFloatText(boss.x,boss.y-30,'旁白治疗','#cc44ff')}if(STATE._hideFirePortal===undefined)STATE._hideFirePortal=false;STATE._hideFirePortal=Math.random()<0.5}}
 }
 function updateSpawning(dt){
   const w=STATE.wave;
@@ -793,11 +832,11 @@ function render(){
   ctx.scale(scX,scY);
   ctx.translate(-cam.x+sx/scX,-cam.y+sy/scY);
   if(STATE.currentMap==='maze')drawMazeBg(cam);else if(STATE.currentMap==='fireField')drawFireMapBg(cam);else drawBackground(cam);
-  drawDrops();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();
+  drawDrops();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();drawNarratorStuff();
   const wh=getMapWH(),WW=wh.W,WH=wh.H;
   ctx.strokeStyle='rgba(255,50,50,0.5)';ctx.lineWidth=4;ctx.strokeRect(0,0,WW,WH);
   // 传送门
-  if(STATE.currentMap==='field'){if(STATE.player.level===10)drawPortal(CONFIG.PORTAL_POS.x,CONFIG.PORTAL_POS.y,'maze');if(STATE.wave.number>=15)drawPortal(CONFIG.WORLD_W/2,CONFIG.WORLD_H-50,'fire')}else if(STATE.currentMap==='fireField'){drawPortal(CONFIG.FIRE_WORLD_W/2,50,'fireReturn')}else if(STATE.currentMap==='maze'){const c=CONFIG.MAZE_CELL,rc=CONFIG.RETURN_CELL;drawPortal(rc.col*c+c/2,rc.row*c+c/2,'mazeReturn')}
+  if(STATE.currentMap==='field'){if(STATE.player.level===10)drawPortal(CONFIG.PORTAL_POS.x,CONFIG.PORTAL_POS.y,'maze');if(STATE.wave.number>=15&&!STATE._hideFirePortal)drawPortal(CONFIG.WORLD_W/2,CONFIG.WORLD_H-50,'fire')}else if(STATE.currentMap==='fireField'){drawPortal(CONFIG.FIRE_WORLD_W/2,50,'fireReturn')}else if(STATE.currentMap==='maze'){const c=CONFIG.MAZE_CELL,rc=CONFIG.RETURN_CELL;drawPortal(rc.col*c+c/2,rc.row*c+c/2,'mazeReturn')}
   ctx.restore();
   if(STATE.bossFlash>0){ctx.fillStyle=`rgba(255,0,0,${STATE.bossFlash/400*0.18})`;ctx.fillRect(0,0,CW,CH)}
   // 恐怖闪烁效果 (12波后)
@@ -1115,6 +1154,37 @@ function drawPlayer(){
 }
 function drawParticles(){for(const p of STATE.particles){ctx.globalAlpha=p.life/p.maxLife;ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size)}ctx.globalAlpha=1}
 function drawFloatTexts(){for(const t of STATE.floatTexts){const a=t.life/t.maxLife;ctx.globalAlpha=a;ctx.fillStyle=t.color;ctx.font=`bold ${Math.floor(13*(1+(1-a)*0.5))}px "Press Start 2P","Courier New",monospace`;ctx.textAlign='center';ctx.fillText(t.text,t.x,t.y)}ctx.globalAlpha=1}
+function drawNarratorStuff(){
+  // 旁白泥潭
+  if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){ctx.fillStyle='rgba(100,100,255,0.25)';ctx.beginPath();ctx.arc(pd.x,pd.y,70,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(150,150,255,0.5)';ctx.lineWidth=2;ctx.stroke()}
+  // 旁白障碍墙
+  if(STATE.narratorWalls)for(const w of STATE.narratorWalls){const t=Date.now()/1000;ctx.fillStyle=`rgba(180,100,255,${0.5+0.2*Math.sin(t*3)})`;ctx.fillRect(w.x-35,w.y-35,70,70);ctx.strokeStyle='#cc44ff';ctx.lineWidth=3;ctx.strokeRect(w.x-35,w.y-35,70,70);ctx.fillStyle='#fff';ctx.font='bold 9px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('🚫',w.x,w.y+4)}
+  // 假掉落物
+  if(STATE.narratorFakeDrops)for(const fd of STATE.narratorFakeDrops){const t=Date.now()/1000;ctx.fillStyle=fd.type==='skill'?`rgba(255,200,0,${0.6+0.3*Math.sin(t*4)})`:'rgba(255,200,0,0.7)';ctx.beginPath();ctx.arc(fd.x,fd.y,fd.big?22:12,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#000';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText(fd.type==='skill'?'?':'$',fd.x,fd.y+3)}
+  // 假敌人
+  if(STATE.narratorFakeEnemies)for(const fe of STATE.narratorFakeEnemies){ctx.fillStyle='rgba(200,150,255,0.5)';ctx.beginPath();ctx.arc(fe.x,fe.y,14,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(200,150,255,0.8)';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#fff';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('?',fe.x,fe.y+3)}
+  // 玩家分身
+  if(STATE._doppel){const dp=STATE._doppel;ctx.fillStyle='rgba(255,255,255,0.3)';ctx.beginPath();ctx.arc(dp.x,dp.y,STATE.player.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=2;ctx.setLineDash([6,6]);ctx.stroke();ctx.setLineDash([])}
+  // 旁白本体
+  const n=STATE.narrator;if(!n)return;
+  const t=Date.now()/1000;const bob=Math.sin(t*2)*5;
+  if(n.stunned>0){ctx.fillStyle='#ff8888'}else{ctx.fillStyle='#cc66ff'}
+  ctx.beginPath();ctx.arc(n.x,n.y+bob,CONFIG.NARRATOR.radius,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=n.stunned>0?'#ff0000':'#aa44dd';ctx.lineWidth=3;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 15px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁',n.x,n.y+bob+5);
+  ctx.fillStyle='#ffcc00';ctx.font='bold 10px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁白',n.x,n.y-CONFIG.NARRATOR.radius-14);
+  // 对话气泡
+  if(n.text&&n.textTimer>0){
+    const bw=ctx.measureText(n.text).width+20,bh=24;
+    const bx=n.x-bw/2,by=n.y-CONFIG.NARRATOR.radius-40+bob;
+    ctx.fillStyle='rgba(255,255,255,0.92)';ctx.fillRect(bx-2,by-2,bw+4,bh+4);
+    ctx.strokeStyle='#aa44dd';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);
+    ctx.fillStyle='#333';ctx.font='bold 10px "Press Start 2P",monospace';ctx.textAlign='center';
+    ctx.fillText(n.text,n.x,by+bh-8);
+  }
+  // 眩晕特效
+  if(n.stunned>0){ctx.fillStyle=`rgba(255,255,0,${0.5+0.3*Math.sin(t*8)})`;ctx.beginPath();ctx.arc(n.x,n.y+bob,CONFIG.NARRATOR.radius+8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('晕!',n.x,n.y+bob-CONFIG.NARRATOR.radius-16)}
+}
 
 /* ============================================================
    小地图
@@ -1152,7 +1222,7 @@ function updateHUD(){
    ============================================================ */
 function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalGameover.classList.remove('active');$('modal-shop').classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
 function startGame(){deleteSave();resetState();STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
-function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
+function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
 function restartGame(){stopMusic();startGame()}
 function togglePause(){if(STATE.screen!=='playing')return;STATE.paused=!STATE.paused;if(!STATE.paused)lastTime=performance.now();updateHUD()}
 function toggleSettings(){const dd=$('settings-dropdown');dd.classList.toggle('active')}
@@ -1174,7 +1244,7 @@ function resetState(){
   STATE.stats={kills:0,bossKills:0,totalGold:0,eliteKills:0};STATE.attackCooldown=0;STATE.invincibleTimer=0;
   STATE.upgradeChoices=[];STATE.pendingUpgrades=0;STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;
-  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;
+  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;
   STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};
 }
 
@@ -1259,7 +1329,7 @@ function loadSavePoint(){
     if(d.mazeGrid){STATE.maze={cols:CONFIG.MAZE_COLS,rows:CONFIG.MAZE_ROWS,cell:CONFIG.MAZE_CELL,grid:d.mazeGrid}}
     STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   }catch(e){return}
-  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
+  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
   if(STATE.screen==='playing')spawnFloatText(STATE.player.x,STATE.player.y-20,'读档成功!','#4ecb71');
 }
 
@@ -1374,6 +1444,19 @@ function update(dt){
   const p=STATE.player,ds=dt/1000;
   const{dx,dy}=getInputDir();p.x+=dx*p.speed*ds;p.y+=dy*p.speed*ds;
   if(STATE.currentMap==='maze'&&STATE.maze){const cl=clampMazePos(p.x,p.y,p.radius,STATE.maze);p.x=cl.x;p.y=cl.y}else{const wh=getMapWH();p.x=clamp(p.x,p.radius,wh.W-p.radius);p.y=clamp(p.y,p.radius,wh.H-p.radius)}
+  // 旁白捣乱: 泥潭减速
+  if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){if(dist(p.x,p.y,pd.x,pd.y)<80){p.x-=dx*p.speed*0.4*ds;p.y-=dy*p.speed*0.4*ds}}
+  // 旁白捣乱: 障碍墙推开
+  if(STATE.narratorWalls)for(const w of STATE.narratorWalls){if(dist(p.x,p.y,w.x,w.y)<70){const wa=Math.atan2(p.y-w.y,p.x-w.x);p.x+=Math.cos(wa)*3;p.y+=Math.sin(wa)*3}}
+  // 旁白捣乱计时器
+  if(STATE._controlReverse>0)STATE._controlReverse-=dt;
+  if(STATE._doppelTimer>0)STATE._doppelTimer-=dt;else STATE._doppel=null;
+  if(STATE.narratorPuddles)for(let i=STATE.narratorPuddles.length-1;i>=0;i--){STATE.narratorPuddles[i].life-=dt;if(STATE.narratorPuddles[i].life<=0)STATE.narratorPuddles.splice(i,1)}
+  if(STATE.narratorWalls)for(let i=STATE.narratorWalls.length-1;i>=0;i--){STATE.narratorWalls[i].life-=dt;if(STATE.narratorWalls[i].life<=0)STATE.narratorWalls.splice(i,1)}
+  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){STATE.narratorFakeDrops[i].life-=dt;if(STATE.narratorFakeDrops[i].life<=0)STATE.narratorFakeDrops.splice(i,1)}
+  if(STATE.narratorFakeEnemies)for(let i=STATE.narratorFakeEnemies.length-1;i>=0;i--){const fe=STATE.narratorFakeEnemies[i];fe.life-=dt;fe.x+=fe.vx*ds;fe.y+=fe.vy*ds;if(fe.life<=0)STATE.narratorFakeEnemies.splice(i,1)}
+  // 旁白假掉落物: 拾取爆炸
+  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){const fd=STATE.narratorFakeDrops[i];if(dist(p.x,p.y,fd.x,fd.y)<p.radius+20){STATE.narratorFakeDrops.splice(i,1);if(fd.type==='gold'&&STATE.narratorStealGold>0){p.gold+=STATE.narratorStealGold;STATE.narratorStealGold=0;spawnFloatText(p.x,p.y-30,'金币夺回!','#ffd700')}else{dealDamage({hp:99999,maxHp:99999,isWave15Boss:false,type:'normal',phaseTimer:9999},Math.floor(p.maxHp*0.08));triggerShake(5,200);spawnParticles(fd.x,fd.y,'#ff4444',8)}}}
   // 精灵朝向
   const moving=dx!==0||dy!==0;
   if(moving){STATE.playerFacing=dy>0?0:dy<0?3:dx<0?1:2}
@@ -1391,7 +1474,7 @@ function update(dt){
     if(hasNearby)p.shieldRegenTimer=5000;
     else{p.shieldRegenTimer-=dt;if(p.shieldRegenTimer<=0)p.shield=Math.min(p.maxShield,p.shield+(p.maxShield/5000)*dt)}
   }
-  updateSpawning(dt);if(STATE.fireSeed&&STATE.wave.number>=15){let fs2=STATE.fireSeed;const d2=dist(fs2.x,fs2.y,STATE.player.x,STATE.player.y);const a2=Math.atan2(fs2.y-STATE.player.y,fs2.x-STATE.player.x);if(d2<600)fs2.chaseTime=(fs2.chaseTime||0)+dt;else if(d2>800)fs2.chaseTime=Math.max(0,(fs2.chaseTime||0)-dt*2);const phase=fs2.chaseTime<8000?0:fs2.chaseTime<18000?1:2;const spdMul=1+phase*0.35;const cdMul=[1,0.7,0.45][phase];fs2.dashTimer-=dt;fs2.attackTimer-=dt;fs2.trailTimer-=dt;fs2.cloneTimer-=dt;fs2.ringTimer-=dt;if(fs2.tiredTimer>0)fs2.tiredTimer-=dt;if(!fs2.clones)fs2.clones=[];for(let i=fs2.clones.length-1;i>=0;i--){fs2.clones[i].life-=dt;if(fs2.clones[i].life<=0)fs2.clones.splice(i,1)}if(phase>=1&&fs2.cloneTimer<=0){fs2.cloneTimer=fs2.cloneCd*cdMul;for(let i=0;i<2;i++){const ca=rand(0,Math.PI*2),cd2=rand(150,300);fs2.clones.push({x:fs2.x+Math.cos(ca)*cd2,y:fs2.y+Math.sin(ca)*cd2,life:4000})}}if(phase>=2&&fs2.ringTimer<=0&&d2<500){fs2.ringTimer=fs2.ringCd;for(let i=0;i<16;i++){const ra=Math.PI*2*i/16;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(ra)*130,vy:Math.sin(ra)*130,damage:20,radius:6,life:1800,sourceId:-99,color:'#ff4400',isShockwave:true,baseRadius:6,maxRadius:45})}}if(!fs2.tiredTimer||fs2.tiredTimer<=0){if(d2<120&&fs2.dashTimer<=0&&d2>25){fs2.dashTimer=fs2.dashCd*cdMul;const ta=a2+rand(-0.8,0.8),dd=rand(300,500);fs2.x=STATE.player.x+Math.cos(ta)*dd;fs2.y=STATE.player.y+Math.sin(ta)*dd;for(let i=0;i<12;i++){const pa=Math.PI*2*i/12;STATE.particles.push({x:fs2.x,y:fs2.y,vx:Math.cos(pa)*100,vy:Math.sin(pa)*100,life:500,color:'#ff6600',radius:4})}fs2.tiredTimer=700;spawnFloatText(fs2.x,fs2.y-18,'😤','#ffaa00')}else if(d2<450){if(d2>40){fs2.x+=Math.cos(a2)*fs2.speed*spdMul*ds;fs2.y+=Math.sin(a2)*fs2.speed*spdMul*ds}if(fs2.attackTimer<=0&&d2>100){fs2.attackTimer=fs2.attackCd*cdMul;const n=phase>=2?5:3;for(let i=0;i<n;i++){const sa=-a2+rand(-0.3,0.3)+(i-Math.floor(n/2))*0.3;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(sa)*170,vy:Math.sin(sa)*170,damage:12+phase*4,radius:5,life:1400,sourceId:-99,color:'#ff8800'})}}}else{const wa=a2+Math.PI*0.4;fs2.x+=Math.cos(wa)*fs2.speed*0.5*spdMul*ds;fs2.y+=Math.sin(wa)*fs2.speed*0.5*spdMul*ds}}if(fs2.trailTimer<=0){fs2.trailTimer=120;for(let i=0;i<3;i++){STATE.particles.push({x:fs2.x+rand(-10,10),y:fs2.y+rand(-10,10),vx:rand(-25,25),vy:rand(-25,25),life:500+rand(-200,200),color:'#ffaa00',radius:2+rand(0,4)})}}const wh=getMapWH();fs2.x=clamp(fs2.x,fs2.radius,wh.W-fs2.radius);fs2.y=clamp(fs2.y,fs2.radius,wh.H-fs2.radius);if(!STATE.fireBuff){const capDist=(fs2.tiredTimer>0)?(STATE.player.radius+fs2.radius)*2.8:(STATE.player.radius+fs2.radius)*1.1;if(dist(STATE.player.x,STATE.player.y,fs2.x,fs2.y)<capDist){STATE.fireBuff=true;STATE.fireBuffTextTimer=3000;STATE.fireSeed=null;for(let i=0;i<15;i++){const pa=Math.PI*2*i/15;STATE.particles.push({x:STATE.player.x,y:STATE.player.y,vx:Math.cos(pa)*120,vy:Math.sin(pa)*120,life:700,color:'#ffaa00',radius:5})}spawnFloatText(STATE.player.x,STATE.player.y-60,'火种之力!','#ff8800');triggerShake(10,500)}}}checkPortal();
+  updateSpawning(dt);if(STATE.fireSeed&&STATE.wave.number>=15){let fs2=STATE.fireSeed;const d2=dist(fs2.x,fs2.y,STATE.player.x,STATE.player.y);const a2=Math.atan2(fs2.y-STATE.player.y,fs2.x-STATE.player.x);if(d2<600)fs2.chaseTime=(fs2.chaseTime||0)+dt;else if(d2>800)fs2.chaseTime=Math.max(0,(fs2.chaseTime||0)-dt*2);const phase=fs2.chaseTime<8000?0:fs2.chaseTime<18000?1:2;const spdMul=1+phase*0.35;const cdMul=[1,0.7,0.45][phase];fs2.dashTimer-=dt;fs2.attackTimer-=dt;fs2.trailTimer-=dt;fs2.cloneTimer-=dt;fs2.ringTimer-=dt;if(fs2.tiredTimer>0)fs2.tiredTimer-=dt;if(!fs2.clones)fs2.clones=[];for(let i=fs2.clones.length-1;i>=0;i--){fs2.clones[i].life-=dt;if(fs2.clones[i].life<=0)fs2.clones.splice(i,1)}if(phase>=1&&fs2.cloneTimer<=0){fs2.cloneTimer=fs2.cloneCd*cdMul;for(let i=0;i<2;i++){const ca=rand(0,Math.PI*2),cd2=rand(150,300);fs2.clones.push({x:fs2.x+Math.cos(ca)*cd2,y:fs2.y+Math.sin(ca)*cd2,life:4000})}}if(phase>=2&&fs2.ringTimer<=0&&d2<500){fs2.ringTimer=fs2.ringCd;for(let i=0;i<16;i++){const ra=Math.PI*2*i/16;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(ra)*130,vy:Math.sin(ra)*130,damage:20,radius:6,life:1800,sourceId:-99,color:'#ff4400',isShockwave:true,baseRadius:6,maxRadius:45})}}if(!fs2.tiredTimer||fs2.tiredTimer<=0){if(d2<120&&fs2.dashTimer<=0&&d2>25){fs2.dashTimer=fs2.dashCd*cdMul;const ta=a2+rand(-0.8,0.8),dd=rand(300,500);fs2.x=STATE.player.x+Math.cos(ta)*dd;fs2.y=STATE.player.y+Math.sin(ta)*dd;for(let i=0;i<12;i++){const pa=Math.PI*2*i/12;STATE.particles.push({x:fs2.x,y:fs2.y,vx:Math.cos(pa)*100,vy:Math.sin(pa)*100,life:500,color:'#ff6600',radius:4})}fs2.tiredTimer=700;spawnFloatText(fs2.x,fs2.y-18,'😤','#ffaa00')}else if(d2<450){if(d2>40){fs2.x+=Math.cos(a2)*fs2.speed*spdMul*ds;fs2.y+=Math.sin(a2)*fs2.speed*spdMul*ds}if(fs2.attackTimer<=0&&d2>100){fs2.attackTimer=fs2.attackCd*cdMul;const n=phase>=2?5:3;for(let i=0;i<n;i++){const sa=-a2+rand(-0.3,0.3)+(i-Math.floor(n/2))*0.3;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(sa)*170,vy:Math.sin(sa)*170,damage:12+phase*4,radius:5,life:1400,sourceId:-99,color:'#ff8800'})}}}else{const wa=a2+Math.PI*0.4;fs2.x+=Math.cos(wa)*fs2.speed*0.5*spdMul*ds;fs2.y+=Math.sin(wa)*fs2.speed*0.5*spdMul*ds}}if(fs2.trailTimer<=0){fs2.trailTimer=120;for(let i=0;i<3;i++){STATE.particles.push({x:fs2.x+rand(-10,10),y:fs2.y+rand(-10,10),vx:rand(-25,25),vy:rand(-25,25),life:500+rand(-200,200),color:'#ffaa00',radius:2+rand(0,4)})}}const wh=getMapWH();fs2.x=clamp(fs2.x,fs2.radius,wh.W-fs2.radius);fs2.y=clamp(fs2.y,fs2.radius,wh.H-fs2.radius);if(!STATE.fireBuff){const capDist=(fs2.tiredTimer>0)?(STATE.player.radius+fs2.radius)*2.8:(STATE.player.radius+fs2.radius)*1.1;if(dist(STATE.player.x,STATE.player.y,fs2.x,fs2.y)<capDist){STATE.fireBuff=true;STATE.fireBuffTextTimer=3000;STATE.fireSeed=null;for(let i=0;i<15;i++){const pa=Math.PI*2*i/15;STATE.particles.push({x:STATE.player.x,y:STATE.player.y,vx:Math.cos(pa)*120,vy:Math.sin(pa)*120,life:700,color:'#ffaa00',radius:5})}spawnFloatText(STATE.player.x,STATE.player.y-60,'火种之力!','#ff8800');triggerShake(10,500)}}}checkPortal();updateNarrator(dt);
   // 敌人移动 + 远程AI + 精英智能 + BOSS智能
   for(const e of STATE.enemies){
     if(e.isWave15Boss&&STATE.currentMap==='fireField')continue;
@@ -1684,7 +1767,7 @@ function checkPortal(){
   const p=STATE.player;
   if(STATE.currentMap==='field'){
     if(p.level===10&&dist(p.x,p.y,CONFIG.PORTAL_POS.x,CONFIG.PORTAL_POS.y)<80)switchMap('maze');
-    if(STATE.wave.number>=15&&dist(p.x,p.y,CONFIG.WORLD_W/2,CONFIG.WORLD_H-50)<80)switchMap('fireField');
+    if(STATE.wave.number>=15&&!STATE._hideFirePortal&&dist(p.x,p.y,CONFIG.WORLD_W/2,CONFIG.WORLD_H-50)<80)switchMap('fireField');
   }else if(STATE.currentMap==='fireField'){
     if(dist(p.x,p.y,CONFIG.FIRE_WORLD_W/2,50)<80)switchMap('field');
   }else{
