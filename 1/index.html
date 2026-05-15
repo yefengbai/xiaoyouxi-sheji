@@ -1563,7 +1563,7 @@ function update(dt){
       // 移动追踪
       if(e._stormSpeed>0)e._stormSpeed-=dt;
       const spdMul2=e.isWave10Boss&&e.attackPhase===3?1.3:1;
-      if(!e.charging){if(d>0.5){if(e.isWave10Boss&&d<150){e.x-=dx*e.speed*0.5*ds;e.y-=dy*e.speed*0.5*ds}else{e.x+=dx*e.speed*spdMul2*ds;e.y+=dy*e.speed*spdMul2*ds}}}
+      if(!e.charging&&!e._stormCharging){if(d>0.5){if(e.isWave10Boss&&d<150){e.x-=dx*e.speed*0.5*ds;e.y-=dy*e.speed*0.5*ds}else{e.x+=dx*e.speed*spdMul2*ds;e.y+=dy*e.speed*spdMul2*ds}}}
       // 冲刺攻击 (独立于攻击循环)
       if(!e.charging){e.chargeTimer=(e.chargeTimer||0)-dt}
       if(e.charging){
@@ -1578,6 +1578,7 @@ function update(dt){
         e.attackPhase=(e.attackPhase+1)%(e.isWave15Boss?5:4);
         e.specialTimer=((e.isWave15Boss?600:e.isWave10Boss?1800:2800)+rand(-133,133))*enrageMult;
       }
+      if(e._stormCharging){e._stormChargeTimer-=dt;if(e._stormChargeTimer<=0){e._stormCharging=false;e.shootTimer=(1200+rand(-200,200))*enrageMult;const spd3=CONFIG.ENEMY_PROJECTILE.speed;for(let i=0;i<12;i++){const a=Math.PI*2*i/12+rand(-0.08,0.08);STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd3*0.7,vy:Math.sin(a)*spd3*0.7,damage:Math.floor(e.atk*0.6),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:2200,sourceId:e.id,color:'#66ddff'})}const ba=Math.atan2(leadY-e.y,leadX-e.x);for(let i=0;i<5;i++){const a=ba+(i-2)*0.28;STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd3*0.55,vy:Math.sin(a)*spd3*0.55,damage:Math.floor(e.atk*0.85),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2800,sourceId:e.id,color:'#aaddff'})}e._stormSpeed=1200;spawnFloatText(e.x,e.y-50,'🌨️ 极寒风暴!','#66ddff')}}
       if(e.shootTimer<=0&&d<(e.isWave15Boss?1500:e.isWave10Boss?900:750)){
         const spd=CONFIG.ENEMY_PROJECTILE.speed;
         if(e.attackPhase===0){
@@ -1666,19 +1667,10 @@ function update(dt){
               STATE.enemyProjectiles.push({x:sx,y:sy,vx:Math.cos(la)*spd*1.2,vy:Math.sin(la)*spd*1.2,damage:Math.floor(atkDmg*1.2),radius:5,life:5000,sourceId:e.id,color:'#ff0000'});
             }
           }else if(e.isWave10Boss){
-            // 极寒风暴: 12方向环形+5发瞄准扇射，BOSS加速
-            e.shootTimer=(1200+rand(-200,200))*enrageMult;
-            for(let i=0;i<12;i++){
-              const a=Math.PI*2*i/12+rand(-0.08,0.08);
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.7,vy:Math.sin(a)*spd*0.7,damage:Math.floor(e.atk*0.6),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:2200,sourceId:e.id,color:'#66ddff'});
-            }
-            const ba=Math.atan2(leadY-e.y,leadX-e.x);
-            for(let i=0;i<5;i++){
-              const a=ba+(i-2)*0.28;
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.55,vy:Math.sin(a)*spd*0.55,damage:Math.floor(e.atk*0.85),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2800,sourceId:e.id,color:'#aaddff'});
-            }
-            e._stormSpeed=1200;
-            spawnFloatText(e.x,e.y-50,'🌨️ 极寒风暴!','#66ddff');
+            // 极寒风暴: 1秒蓄力 → 12方向环形+5发瞄准扇射+加速
+            e._stormCharging=true;e._stormChargeTimer=1000;
+            e.shootTimer=9999;
+            spawnFloatText(e.x,e.y-50,'🌨️ 极寒风暴蓄力中...','#88ccff');
           }else{
             e.shootTimer=(2400+rand(-400,400))*enrageMult;
             for(let i=0;i<3;i++){
