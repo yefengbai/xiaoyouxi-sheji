@@ -19,7 +19,7 @@
 body{
   background:#060610;display:flex;justify-content:center;align-items:center;
   min-height:100vh;font-family:'Press Start 2P','Courier New','SimHei',monospace;
-  color:var(--text);user-select:none;-webkit-user-select:none;cursor:crosshair;
+  color:var(--text);user-select:none;-webkit-user-select:none;
   font-size:11px;letter-spacing:0.5px;
 }
 #game-wrapper{display:flex;flex-direction:column;gap:6px;width:820px;max-width:99vw;position:relative;transform:scale(1.35);transform-origin:center center;margin-top:-30px}
@@ -330,7 +330,7 @@ const STATE={
   comboCount:0,comboTimer:0,
   playerFacing:0,playerFrame:0,playerFrameTimer:0,playerSpriteReady:false,boss15SpriteReady:false,boss10SpriteReady:false,
   bgImage:null,bgLoaded:false,bgImgW:800,bgImgH:600,bgTile:null,fireMapBg:null,fireMapBgLoaded:false,fireMapBgW:5000,fireMapBgH:5000,
-  camera:{x:0,y:0},currentMap:'field',maze:null,portalGlow:0,bloodBuff:false,bloodTextTimer:0,mazeBossAlive:false,fireBuff:false,fireBuffTextTimer:0,fireSeed:null,narrator:null,narratorStun:0,narratorFakeDrops:[],narratorFakeEnemies:[],
+  camera:{x:0,y:0},currentMap:'field',maze:null,portalGlow:0,bloodBuff:false,bloodTextTimer:0,mazeBossAlive:false,fireBuff:false,fireBuffTextTimer:0,fireSeed:null,narrator:null,narratorStun:0,narratorFakeDrops:[],narratorFakeEnemies:[],_slotMachine:null,_slotFreeze:false,boss10Active:false,speedOrbs:[],speedBoost:0,speedOrbTimer:0,
   mapState:{field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}},
 };
 
@@ -392,6 +392,7 @@ function initFireMapBg(){STATE.fireMapBg=new Image();STATE.fireMapBg.onload=()=>
 let audioCtx=null,masterGain=null,musicGain=null,musicInterval=null,musicStep=0;
 let bassLPF=null,delayNode=null,delayFB=null,reverbGain=null;
 const DEEP_BPM=88,STEP_MS=60/DEEP_BPM*1000/4; // 16分音符 ~170ms, 64步≈10.9秒
+let musicStepMs=STEP_MS;
 // ═════════ 暗黑地牢BGM — D弗里吉亚调式(D-Eb-F-G-A-Bb-C)，5层乐器 ═════════
 // L1: 主旋律 — 正弦波+微颤音，空灵诡异
 const DEEP_LEAD=[
@@ -469,8 +470,9 @@ function startMusic(){initAudio();if(!audioCtx||!musicGain||musicInterval)return
   if(p>0)playMusicNote(p,STEP_MS*3.5,'triangle',0.04,false);
   if(a>0)playMusicNote(a,STEP_MS*0.5,'sine',0.025,true);
   if(k===1)playPercHit(true);else if(k===2)playPercHit(false);
-  musicStep++},STEP_MS)}
-function stopMusic(){if(musicInterval){clearInterval(musicInterval);musicInterval=null}}
+  musicStep++},musicStepMs)}
+function stopMusic(){if(musicInterval){clearInterval(musicInterval);musicInterval=null};musicStepMs=STEP_MS}
+function setMusicSpeed(mult){musicStepMs=STEP_MS/mult;if(musicInterval){stopMusic();startMusic()}}
 function toggleMusic(){STATE.musicMuted=!STATE.musicMuted;const b=$('s-btn-music');b.textContent=STATE.musicMuted?'关':'开';b.className='settings-btn '+(STATE.musicMuted?'off':'on')}
 function setMusicVolume(val){const v=parseInt(val)||70;STATE.musicVolume=v;$('s-vol-label').textContent=v;const sl=$('s-music-vol');if(sl)sl.value=v;if(musicGain){const gain=0.05+(v-10)/90*0.50;musicGain.gain.value=gain}}
 function toggleMute(){STATE.muted=!STATE.muted;const b=$('s-btn-sfx');b.textContent=STATE.muted?'关':'开';b.className='settings-btn '+(STATE.muted?'off':'on')}
@@ -532,8 +534,8 @@ function createBoss(){
   const w=STATE.wave.number,diff=getDifficultyMult();
   const isFinalBoss=w===CONFIG.TOTAL_WAVES;
   // BOSS HP随波次递增: 10波≈27000, 20波魔王=200000
-  const hp=isFinalBoss?200000:Math.floor(15000+w*1200);
-  const atk=Math.floor(CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8));
+  const hp=isFinalBoss?200000:w===10?15000:Math.floor(15000+w*1200);
+  const atk=Math.floor((CONFIG.ENEMY_TYPES.normal.atk*diff*CONFIG.BOSS.atkMult+w*(isFinalBoss?18:8))*(w===10?0.6:1));
   return{
     id:++_eid,x:edgePos().x,y:edgePos().y,
     hp,maxHp:hp,atk,speed:CONFIG.BOSS.speed,radius:w===15?200:w===10?126:CONFIG.BOSS.radius,
@@ -610,7 +612,7 @@ function updateSpawning(dt){
     const nextIsBoss=(w.number+1)%CONFIG.BOSS_EVERY===0;
     if(nextIsBoss||w.number===14)spawnFloatText(STATE.player.x,STATE.player.y-35,w.number===14?'魔王即将降临! 需火种之力!':'BOSS即将出现!',w.number===14?'#ff0000':'#ff6644');
     w.number++;w.transitioning=true;w.waveDelayTimer=effWaveDelay;return}
-  if(w.spawned<w.spawnQueue.length){w.spawnTimer+=dt;while(w.spawnTimer>=effSpawnInt&&w.spawned<w.spawnQueue.length){w.spawnTimer-=effSpawnInt;const type=w.spawnQueue[w.spawned];if(type==='boss'){const boss=createBoss();STATE.enemies.push(boss);w.bossActive=true;if(boss.isWave15Boss&&!STATE.fireBuff){spawnFloatText(STATE.player.x,STATE.player.y-50,'前往下方通道追寻火种!','#ff8800');STATE.fireSeed={x:CONFIG.WORLD_W/2+rand(-200,200),y:CONFIG.WORLD_H-100,speed:380,radius:28,life:999999,attackTimer:0,attackCd:1800,dashTimer:0,dashCd:3500,trailTimer:0,chaseTime:0,cloneTimer:0,cloneCd:7000,ringTimer:0,ringCd:5000}}triggerShake(w.number===CONFIG.TOTAL_WAVES?22:14,w.number===CONFIG.TOTAL_WAVES?1000:600);STATE.bossFlash=w.number===CONFIG.TOTAL_WAVES?700:400;if(w.number===CONFIG.TOTAL_WAVES)spawnFloatText(boss.x,boss.y-30,'魔王降临!','#ff0000');sfxBossSpawn()}else if(type==='elite'){STATE.enemies.push(createEnemy(pickEnemyType(),edgePos(),true))}else STATE.enemies.push(createEnemy(type,edgePos()));w.spawned++}}
+  if(w.spawned<w.spawnQueue.length){w.spawnTimer+=dt;while(w.spawnTimer>=effSpawnInt&&w.spawned<w.spawnQueue.length){w.spawnTimer-=effSpawnInt;const type=w.spawnQueue[w.spawned];if(type==='boss'){const boss=createBoss();STATE.enemies.push(boss);w.bossActive=true;if(boss.isWave10Boss){STATE.boss10Active=true;setMusicSpeed(1.4);STATE.speedOrbs=[];STATE.speedBoost=0;STATE.speedOrbTimer=0;spawnFloatText(boss.x,boss.y-50,'BOSS跑得很快! 地图上有加速球别被追上!','#44ccff')}if(boss.isWave15Boss&&!STATE.fireBuff){spawnFloatText(STATE.player.x,STATE.player.y-50,'前往下方通道追寻火种!','#ff8800');STATE.fireSeed={x:CONFIG.WORLD_W/2+rand(-200,200),y:CONFIG.WORLD_H-100,speed:380,radius:28,life:999999,attackTimer:0,attackCd:1800,dashTimer:0,dashCd:3500,trailTimer:0,chaseTime:0,cloneTimer:0,cloneCd:7000,ringTimer:0,ringCd:5000}}triggerShake(w.number===CONFIG.TOTAL_WAVES?22:14,w.number===CONFIG.TOTAL_WAVES?1000:600);STATE.bossFlash=w.number===CONFIG.TOTAL_WAVES?700:400;if(w.number===CONFIG.TOTAL_WAVES)spawnFloatText(boss.x,boss.y-30,'魔王降临!','#ff0000');sfxBossSpawn()}else if(type==='elite'){STATE.enemies.push(createEnemy(pickEnemyType(),edgePos(),true))}else STATE.enemies.push(createEnemy(type,edgePos()));w.spawned++}}
 }
 
 /* ============================================================
@@ -705,7 +707,7 @@ function killEnemy(enemy){
   if(STATE.comboCount>=10&&STATE.comboCount%10===0)spawnFloatText(enemy.x,enemy.y-20,STATE.comboCount+' COMBO!','#ffd700');
   if(enemy.type==='boss'){
     if(enemy.isMazeBoss){STATE.mazeBossAlive=false;spawnFloatText(enemy.x,enemy.y-24,'守护者陨落!','#ff4444')}
-    else{STATE.stats.bossKills++;STATE.wave.bossActive=false;spawnFloatText(enemy.x,enemy.y-24,'BOSS DOWN!','#f0883e');sfxBossDeath();triggerShake(18,700)}
+    else{STATE.stats.bossKills++;STATE.wave.bossActive=false;if(enemy.isWave10Boss){STATE.boss10Active=false;setMusicSpeed(1);STATE.speedOrbs=[];STATE.speedBoost=0}spawnFloatText(enemy.x,enemy.y-24,'BOSS DOWN!','#f0883e');sfxBossDeath();triggerShake(18,700)}
     for(let i=0;i<20;i++)STATE.drops.push({x:enemy.x+rand(-55,55),y:enemy.y+rand(-55,55),type:'gold',value:randInt(10,30),radius:CONFIG.DROP.radius+2,life:CONFIG.DROP.lifetime+6000});
     // BOSS必掉技能球
     STATE.drops.push({x:enemy.x+rand(-10,10),y:enemy.y+rand(-10,10),type:'skill',value:1,radius:8,life:CONFIG.DROP.lifetime+8000});
@@ -832,13 +834,14 @@ function render(){
   ctx.scale(scX,scY);
   ctx.translate(-cam.x+sx/scX,-cam.y+sy/scY);
   if(STATE.currentMap==='maze')drawMazeBg(cam);else if(STATE.currentMap==='fireField')drawFireMapBg(cam);else drawBackground(cam);
-  drawDrops();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();drawNarratorStuff();
+  drawDrops();drawSpeedOrbs();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();drawNarratorStuff();
   const wh=getMapWH(),WW=wh.W,WH=wh.H;
   ctx.strokeStyle='rgba(255,50,50,0.5)';ctx.lineWidth=4;ctx.strokeRect(0,0,WW,WH);
   // 传送门
   if(STATE.currentMap==='field'){if(STATE.player.level===10)drawPortal(CONFIG.PORTAL_POS.x,CONFIG.PORTAL_POS.y,'maze');if(STATE.wave.number>=15&&!STATE._hideFirePortal)drawPortal(CONFIG.WORLD_W/2,CONFIG.WORLD_H-50,'fire')}else if(STATE.currentMap==='fireField'){drawPortal(CONFIG.FIRE_WORLD_W/2,50,'fireReturn')}else if(STATE.currentMap==='maze'){const c=CONFIG.MAZE_CELL,rc=CONFIG.RETURN_CELL;drawPortal(rc.col*c+c/2,rc.row*c+c/2,'mazeReturn')}
   ctx.restore();
   if(STATE.bossFlash>0){ctx.fillStyle=`rgba(255,0,0,${STATE.bossFlash/400*0.18})`;ctx.fillRect(0,0,CW,CH)}
+  if(STATE.boss10Active){ctx.fillStyle='rgba(30,80,220,0.13)';ctx.fillRect(0,0,CW,CH)}
   // 恐怖闪烁效果 (12波后)
   if(STATE.horrorFlicker>0&&STATE.wave.number>=12){ctx.fillStyle=`rgba(0,0,0,${STATE.horrorFlicker/250*0.55})`;ctx.fillRect(0,0,CW,CH)}
   // 低血量红色警示
@@ -856,6 +859,7 @@ function render(){
   drawMinimap();
   // 血魔之力降临大字体
   if(STATE.bloodTextTimer>0){const a=Math.min(1,STATE.bloodTextTimer/1000);ctx.fillStyle=`rgba(255,20,40,${a})`;ctx.font='bold 36px "Press Start 2P",monospace';ctx.textAlign='center';ctx.shadowColor='#ff0000';ctx.shadowBlur=20;ctx.fillText('血魔之力降临',CW/2,CH/2-40);ctx.shadowBlur=0;STATE.bloodTextTimer-=16}if(STATE.fireBuffTextTimer>0){const a2=Math.min(1,STATE.fireBuffTextTimer/1000);ctx.fillStyle='rgba(255,136,0,'+a2+')';ctx.font='bold 36px "Press Start 2P",monospace';ctx.textAlign='center';ctx.shadowColor='#ff8800';ctx.shadowBlur=20;ctx.fillText('火种之力!',CW/2,CH/2-80);ctx.shadowBlur=0;STATE.fireBuffTextTimer-=16}
+  if(STATE._slotMachine){const sm=STATE._slotMachine;const cx=480,cy=360;ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,960,720);ctx.fillStyle='rgba(20,10,40,0.95)';ctx.fillRect(cx-220,cy-130,440,260);ctx.strokeStyle='#ffd700';ctx.lineWidth=5;ctx.strokeRect(cx-220,cy-130,440,260);ctx.fillStyle='#ffd700';ctx.font='bold 24px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('🎰 老虎机 🎰',cx,cy-80);const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){const rx=cx-90+i*90;ctx.fillStyle='#1a1a2e';ctx.fillRect(rx-38,cy-38,76,76);ctx.strokeStyle=sm.timer<sm.reelStops[i]?'#aaa':'#ffd700';ctx.lineWidth=3;ctx.strokeRect(rx-38,cy-38,76,76);ctx.fillStyle='#fff';ctx.font='bold 40px "Press Start 2P",monospace';ctx.fillText(icons[sm.reels[i]],rx,cy+13)}if(sm.timer>=sm.duration-300){ctx.fillStyle=sm.win?'#ffd700':'#ff4444';ctx.font='bold 20px "Press Start 2P",monospace';ctx.fillText(sm.win?'🎉 中奖!':'💥 未中奖!',cx,cy+100)}ctx.textAlign='start'}
 }
 
 function drawFireMapBg(cam){const VW=CONFIG.VIEW_W,VH=CONFIG.VIEW_H;if(STATE.fireMapBgLoaded&&STATE.fireMapBg){const iw=STATE.fireMapBg.naturalWidth||1000,ih=STATE.fireMapBg.naturalHeight||1000;const sx=CONFIG.FIRE_WORLD_W/iw,sy=CONFIG.FIRE_WORLD_H/ih;ctx.drawImage(STATE.fireMapBg,0,0,iw*sx,ih*sy)}else{ctx.fillStyle='#3d2a1a';ctx.fillRect(0,0,CONFIG.FIRE_WORLD_W,CONFIG.FIRE_WORLD_H);for(let i=0;i<5000;i+=80){ctx.fillStyle=i%160===0?'#4a3520':'#3d2a1a';ctx.fillRect(i%5000,Math.floor(i/5000)*80,80,80)}}}
@@ -871,6 +875,7 @@ function drawBackground(cam){
   }
 }
 function drawDrops(){const now=STATE._now||performance.now();STATE.drops.forEach((d,idx)=>{const fadeAlpha=Math.min(1,d.life/500);const pulse=0.5+0.5*Math.sin(now/280+idx*1.7);ctx.globalAlpha=fadeAlpha*pulse;if(d.type==='skill'){ctx.shadowColor='#ffd700';ctx.shadowBlur=16;ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(d.x,d.y,d.radius,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.strokeStyle='#ff8c00';ctx.lineWidth=2;ctx.beginPath();ctx.arc(d.x,d.y,d.radius*0.5,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText('★',d.x,d.y+3);ctx.shadowBlur=0}else if(d.type==='gold'){ctx.shadowColor='#ffd700';ctx.shadowBlur=12;ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(d.x,d.y,d.radius,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(d.x-1,d.y-1,d.radius*0.35,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}else{ctx.shadowColor='#4da6ff';ctx.shadowBlur=10;ctx.fillStyle='#5badff';ctx.beginPath();ctx.arc(d.x,d.y,d.radius-1,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(d.x,d.y,d.radius*0.3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}});ctx.globalAlpha=1}
+function drawSpeedOrbs(){const now=STATE._now||performance.now();STATE.speedOrbs.forEach((o,idx)=>{const fadeAlpha=Math.min(1,o.life/800);const pulse=0.7+0.3*Math.sin(now/200+idx*2.3);ctx.globalAlpha=fadeAlpha*pulse;ctx.shadowColor='#44ccff';ctx.shadowBlur=30;const g=ctx.createRadialGradient(o.x,o.y,8,o.x,o.y,40);g.addColorStop(0,'rgba(120,230,255,0.9)');g.addColorStop(0.5,'rgba(40,140,255,0.7)');g.addColorStop(1,'rgba(20,60,200,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(o.x,o.y,40,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.strokeStyle='#88eeff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(o.x,o.y,24,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 16px monospace';ctx.textAlign='center';ctx.fillText('⚡',o.x,o.y+6);ctx.fillStyle='#44ccff';ctx.font='bold 10px "Press Start 2P",monospace';ctx.fillText('加速',o.x,o.y-32);ctx.shadowBlur=0});ctx.globalAlpha=1}
 
 /* ============================================================
    精灵图生成 - 像素RPG怪物造型
@@ -1074,7 +1079,7 @@ function drawEnemy(e){
   const sc2=(wave15||wave10)?sc*1.2:sc;
   const scale=sc2/Math.max(sprW,sprH);
   const dx=e.x-(sprW*scale)/2,dy=e.y-(sprH*scale)/2;
-  if(wave15){ctx.shadowColor='#ff4422';ctx.shadowBlur=16+Math.sin((STATE._now||performance.now())/200)*6;ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);ctx.shadowBlur=0;}if(wave10){ctx.shadowColor='#e040e0';ctx.shadowBlur=12+Math.sin((STATE._now||performance.now())/200)*5;ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);ctx.shadowBlur=0;}
+  if(wave15){ctx.shadowColor='#ff4422';ctx.shadowBlur=16+Math.sin((STATE._now||performance.now())/200)*6;ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);ctx.shadowBlur=0;}if(wave10){ctx.shadowColor='#44ccff';ctx.shadowBlur=14+Math.sin((STATE._now||performance.now())/180)*6;ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);ctx.shadowBlur=0;}
   // 敌人描边 (1px黑色轮廓, 所有BOSS跳过)
   if(e.type!=='boss'){
     ctx.save();ctx.globalAlpha=0.35;ctx.fillStyle='#000';
@@ -1085,8 +1090,8 @@ function drawEnemy(e){
   ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale);
   if(flash){ctx.globalAlpha=0.45;ctx.fillStyle='#fff';ctx.drawImage(spr,dx,dy,sprW*scale,sprH*scale)}
   if(e.type==='ghost'){ctx.globalAlpha=1;ctx.shadowBlur=0}
-  if(wave15){ctx.fillStyle='#ff4422';ctx.font='bold 12px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS',e.x,e.y-r-20)}if(wave10){ctx.fillStyle='#e040e0';ctx.font='bold 11px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS',e.x,e.y-r-20)}
-  if(wave15){ctx.strokeStyle='rgba(255,0,0,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(255,0,0,0.15)';ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill()}if(wave10){ctx.strokeStyle='rgba(224,64,224,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(224,64,224,0.15)';ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill()}
+  if(wave15){ctx.fillStyle='#ff4422';ctx.font='bold 12px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('BOSS',e.x,e.y-r-20)}if(wave10){ctx.fillStyle='#44ccff';ctx.font='bold 11px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('冰霜巨兽',e.x,e.y-r-20)}
+  if(wave15){ctx.strokeStyle='rgba(255,0,0,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(255,0,0,0.15)';ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill()}if(wave10){ctx.strokeStyle='rgba(68,204,255,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(68,204,255,0.15)';ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill()}
   ctx.imageSmoothingEnabled=true;
   // 血条 (非BOSS)
   if(e.type!=='boss'&&e.hp<e.maxHp){
@@ -1160,7 +1165,7 @@ function drawNarratorStuff(){
   // 旁白障碍墙
   if(STATE.narratorWalls)for(const w of STATE.narratorWalls){const t=Date.now()/1000;ctx.fillStyle=`rgba(180,100,255,${0.5+0.2*Math.sin(t*3)})`;ctx.fillRect(w.x-35,w.y-35,70,70);ctx.strokeStyle='#cc44ff';ctx.lineWidth=3;ctx.strokeRect(w.x-35,w.y-35,70,70);ctx.fillStyle='#fff';ctx.font='bold 9px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('🚫',w.x,w.y+4)}
   // 假掉落物
-  if(STATE.narratorFakeDrops)for(const fd of STATE.narratorFakeDrops){const t=Date.now()/1000;ctx.fillStyle=fd.type==='skill'?`rgba(255,200,0,${0.6+0.3*Math.sin(t*4)})`:'rgba(255,200,0,0.7)';ctx.beginPath();ctx.arc(fd.x,fd.y,fd.big?22:12,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#000';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText(fd.type==='skill'?'?':'$',fd.x,fd.y+3)}
+  if(STATE.narratorFakeDrops)for(const fd of STATE.narratorFakeDrops){const t=Date.now()/1000;ctx.fillStyle=fd.type==='skill'?`rgba(255,200,0,${0.6+0.3*Math.sin(t*4)})`:'rgba(255,200,0,0.7)';ctx.beginPath();ctx.arc(fd.x,fd.y,fd.big?66:36,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke();ctx.fillStyle='#000';ctx.font='bold 24px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText(fd.type==='skill'?'?':'$',fd.x,fd.y+9)}
   // 假敌人
   if(STATE.narratorFakeEnemies)for(const fe of STATE.narratorFakeEnemies){ctx.fillStyle='rgba(200,150,255,0.5)';ctx.beginPath();ctx.arc(fe.x,fe.y,14,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(200,150,255,0.8)';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#fff';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('?',fe.x,fe.y+3)}
   // 玩家分身
@@ -1171,19 +1176,20 @@ function drawNarratorStuff(){
   if(n.stunned>0){ctx.fillStyle='#ff8888'}else{ctx.fillStyle='#cc66ff'}
   ctx.beginPath();ctx.arc(n.x,n.y+bob,CONFIG.NARRATOR.radius,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle=n.stunned>0?'#ff0000':'#aa44dd';ctx.lineWidth=3;ctx.stroke();
-  ctx.fillStyle='#fff';ctx.font='bold 15px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁',n.x,n.y+bob+5);
-  ctx.fillStyle='#ffcc00';ctx.font='bold 10px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁白',n.x,n.y-CONFIG.NARRATOR.radius-14);
+  ctx.fillStyle='#fff';ctx.font='bold 44px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁',n.x,n.y+bob+14);
+  ctx.fillStyle='#ffcc00';ctx.font='bold 28px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('旁白',n.x,n.y-CONFIG.NARRATOR.radius-30);
   // 对话气泡
   if(n.text&&n.textTimer>0){
-    const bw=ctx.measureText(n.text).width+20,bh=24;
-    const bx=n.x-bw/2,by=n.y-CONFIG.NARRATOR.radius-40+bob;
-    ctx.fillStyle='rgba(255,255,255,0.92)';ctx.fillRect(bx-2,by-2,bw+4,bh+4);
-    ctx.strokeStyle='#aa44dd';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);
-    ctx.fillStyle='#333';ctx.font='bold 10px "Press Start 2P",monospace';ctx.textAlign='center';
-    ctx.fillText(n.text,n.x,by+bh-8);
+    ctx.font='bold 26px "Press Start 2P",monospace';
+    const bw=ctx.measureText(n.text).width+48,bh=56;
+    const bx=n.x-bw/2,by=n.y-CONFIG.NARRATOR.radius-65+bob;
+    ctx.fillStyle='rgba(255,255,255,0.92)';ctx.fillRect(bx-4,by-4,bw+8,bh+8);
+    ctx.strokeStyle='#aa44dd';ctx.lineWidth=5;ctx.strokeRect(bx,by,bw,bh);
+    ctx.fillStyle='#333';ctx.font='bold 26px "Press Start 2P",monospace';ctx.textAlign='center';
+    ctx.fillText(n.text,n.x,by+bh-18);
   }
   // 眩晕特效
-  if(n.stunned>0){ctx.fillStyle=`rgba(255,255,0,${0.5+0.3*Math.sin(t*8)})`;ctx.beginPath();ctx.arc(n.x,n.y+bob,CONFIG.NARRATOR.radius+8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('晕!',n.x,n.y+bob-CONFIG.NARRATOR.radius-16)}
+  if(n.stunned>0){ctx.fillStyle=`rgba(255,255,0,${0.5+0.3*Math.sin(t*8)})`;ctx.beginPath();ctx.arc(n.x,n.y+bob,CONFIG.NARRATOR.radius+8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 24px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillText('晕!',n.x,n.y+bob-CONFIG.NARRATOR.radius-30)}
 }
 
 /* ============================================================
@@ -1222,7 +1228,7 @@ function updateHUD(){
    ============================================================ */
 function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalGameover.classList.remove('active');$('modal-shop').classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
 function startGame(){deleteSave();resetState();STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
-function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
+function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
 function restartGame(){stopMusic();startGame()}
 function togglePause(){if(STATE.screen!=='playing')return;STATE.paused=!STATE.paused;if(!STATE.paused)lastTime=performance.now();updateHUD()}
 function toggleSettings(){const dd=$('settings-dropdown');dd.classList.toggle('active')}
@@ -1244,7 +1250,7 @@ function resetState(){
   STATE.stats={kills:0,bossKills:0,totalGold:0,eliteKills:0};STATE.attackCooldown=0;STATE.invincibleTimer=0;
   STATE.upgradeChoices=[];STATE.pendingUpgrades=0;STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;
-  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;
+  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;STATE.boss10Active=false;setMusicSpeed(1);STATE.speedOrbs=[];STATE.speedBoost=0;STATE.speedOrbTimer=0;
   STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};
 }
 
@@ -1329,7 +1335,7 @@ function loadSavePoint(){
     if(d.mazeGrid){STATE.maze={cols:CONFIG.MAZE_COLS,rows:CONFIG.MAZE_ROWS,cell:CONFIG.MAZE_CELL,grid:d.mazeGrid}}
     STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   }catch(e){return}
-  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
+  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
   if(STATE.screen==='playing')spawnFloatText(STATE.player.x,STATE.player.y-20,'读档成功!','#4ecb71');
 }
 
@@ -1442,12 +1448,32 @@ function gameLoop(ts){
 
 function update(dt){
   const p=STATE.player,ds=dt/1000;
-  const{dx,dy}=getInputDir();p.x+=dx*p.speed*ds;p.y+=dy*p.speed*ds;
+  if(STATE._slotFreeze){if(STATE._slotMachine){const sm=STATE._slotMachine;sm.timer+=dt;const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){if(sm.timer<sm.reelStops[i]){sm.reels[i]=Math.floor((sm.timer/80+i*7)%icons.length)}else{sm.reels[i]=icons.indexOf(sm.finalReels[i])}}if(sm.timer>=sm.duration){if(sm.win){const def=CONFIG.UPGRADE_POOL.find(u=>u.id===sm.skillId);if(def){const val=def.id==='atkSpd'?randInt(def.min,def.max):parseFloat(rand(def.min,def.max).toFixed(1));switch(def.id){case'atk':p.atk+=Math.floor(val);break;case'maxHp':{const b=Math.floor(val);p.maxHp+=b;p.hp=Math.min(p.hp+b,p.maxHp);break}case'speed':p.speed=parseFloat((p.speed+val).toFixed(1));break;case'atkSpd':p.atkSpd=Math.max(120,p.atkSpd-val);break;case'hpRegen':p.hpRegen=parseFloat((p.hpRegen+val).toFixed(1));break;case'armorPen':p.armorPen+=Math.floor(val);break;case'comboChance':p.comboChance=Math.min(60,p.comboChance+Math.floor(val));break;case'poison':p.poisonDmg+=parseFloat(val.toFixed(1));break;case'execute':p.executeBonus+=Math.floor(val);break;case'lifesteal':p.lifesteal=Math.min(40,p.lifesteal+Math.floor(val));break;case'reflect':p.reflect=Math.min(45,p.reflect+Math.floor(val));break;case'dmgReduction':p.damageReduction=Math.min(50,p.damageReduction+Math.floor(val));break;case'shield':p.maxShield+=Math.floor(val);p.shield=p.maxShield;break;case'xpBonus':p.xpBonus+=Math.floor(val);break;case'goldBonus':p.goldBonus+=Math.floor(val);break;case'pickupRange':p.pickupRange+=Math.floor(val);break}}spawnFloatText(p.x,p.y-50,'中奖! '+def.name,'#ffd700');spawnParticles(p.x,p.y,'#ffd700',15)}else{dealDamage({hp:99999,maxHp:99999,isWave15Boss:false,type:'normal',phaseTimer:9999},Math.floor(p.maxHp*0.12));triggerShake(8,300);spawnParticles(p.x,p.y,'#ff4444',12);spawnFloatText(p.x,p.y-40,'未中奖!','#ff4444')}STATE._slotMachine=null;STATE._slotFreeze=false}}return;}
+  const{dx,dy}=getInputDir();const spdMul=STATE.speedBoost>0?1.6:1;p.x+=dx*p.speed*spdMul*ds;p.y+=dy*p.speed*spdMul*ds;
   if(STATE.currentMap==='maze'&&STATE.maze){const cl=clampMazePos(p.x,p.y,p.radius,STATE.maze);p.x=cl.x;p.y=cl.y}else{const wh=getMapWH();p.x=clamp(p.x,p.radius,wh.W-p.radius);p.y=clamp(p.y,p.radius,wh.H-p.radius)}
   // 旁白捣乱: 泥潭减速
   if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){if(dist(p.x,p.y,pd.x,pd.y)<80){p.x-=dx*p.speed*0.4*ds;p.y-=dy*p.speed*0.4*ds}}
   // 旁白捣乱: 障碍墙推开
   if(STATE.narratorWalls)for(const w of STATE.narratorWalls){if(dist(p.x,p.y,w.x,w.y)<70){const wa=Math.atan2(p.y-w.y,p.x-w.x);p.x+=Math.cos(wa)*3;p.y+=Math.sin(wa)*3}}
+  // 加速球系统 (第10关BOSS)
+  if(STATE.boss10Active){
+    STATE.speedOrbTimer-=dt;
+    if(STATE.speedOrbTimer<=0&&STATE.speedOrbs.length<5){
+      STATE.speedOrbTimer=1500+rand(0,1000);
+      const wh2=getMapWH();
+      const ox=p.x+rand(-500,500),oy=p.y+rand(-400,400);
+      STATE.speedOrbs.push({x:clamp(ox,60,wh2.W-60),y:clamp(oy,60,wh2.H-60),life:5000});
+    }
+    for(let i=STATE.speedOrbs.length-1;i>=0;i--){
+      const orb=STATE.speedOrbs[i];orb.life-=dt;
+      if(orb.life<=0){STATE.speedOrbs.splice(i,1);continue}
+      if(dist(p.x,p.y,orb.x,orb.y)<p.radius+44){
+        STATE.speedBoost=3000;STATE.speedOrbs.splice(i,1);
+        spawnFloatText(p.x,p.y-30,'加速!','#44ccff');spawnParticles(p.x,p.y,'#44ccff',8);
+      }
+    }
+  }
+  if(STATE.speedBoost>0)STATE.speedBoost-=dt;
   // 旁白捣乱计时器
   if(STATE._controlReverse>0)STATE._controlReverse-=dt;
   if(STATE._doppelTimer>0)STATE._doppelTimer-=dt;else STATE._doppel=null;
@@ -1456,7 +1482,7 @@ function update(dt){
   if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){STATE.narratorFakeDrops[i].life-=dt;if(STATE.narratorFakeDrops[i].life<=0)STATE.narratorFakeDrops.splice(i,1)}
   if(STATE.narratorFakeEnemies)for(let i=STATE.narratorFakeEnemies.length-1;i>=0;i--){const fe=STATE.narratorFakeEnemies[i];fe.life-=dt;fe.x+=fe.vx*ds;fe.y+=fe.vy*ds;if(fe.life<=0)STATE.narratorFakeEnemies.splice(i,1)}
   // 旁白假掉落物: 拾取爆炸
-  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){const fd=STATE.narratorFakeDrops[i];if(dist(p.x,p.y,fd.x,fd.y)<p.radius+20){STATE.narratorFakeDrops.splice(i,1);if(fd.type==='gold'&&STATE.narratorStealGold>0){p.gold+=STATE.narratorStealGold;STATE.narratorStealGold=0;spawnFloatText(p.x,p.y-30,'金币夺回!','#ffd700')}else{dealDamage({hp:99999,maxHp:99999,isWave15Boss:false,type:'normal',phaseTimer:9999},Math.floor(p.maxHp*0.08));triggerShake(5,200);spawnParticles(fd.x,fd.y,'#ff4444',8)}}}
+  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){const fd=STATE.narratorFakeDrops[i];if(dist(p.x,p.y,fd.x,fd.y)<p.radius+60){STATE.narratorFakeDrops.splice(i,1);const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);const win=Math.random()<0.35;const winIcon=icons[randInt(0,icons.length-1)];const reels=[win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)]];STATE._slotMachine={reels:[0,1,2],finalReels:reels,reelStops:[800,1600,2400],timer:0,duration:2800,win,skillId:win?CONFIG.UPGRADE_POOL[randInt(0,CONFIG.UPGRADE_POOL.length-1)].id:null};STATE._slotFreeze=true}}
   // 精灵朝向
   const moving=dx!==0||dy!==0;
   if(moving){STATE.playerFacing=dy>0?0:dy<0?3:dx<0?1:2}
@@ -1474,7 +1500,7 @@ function update(dt){
     if(hasNearby)p.shieldRegenTimer=5000;
     else{p.shieldRegenTimer-=dt;if(p.shieldRegenTimer<=0)p.shield=Math.min(p.maxShield,p.shield+(p.maxShield/5000)*dt)}
   }
-  updateSpawning(dt);if(STATE.fireSeed&&STATE.wave.number>=15){let fs2=STATE.fireSeed;const d2=dist(fs2.x,fs2.y,STATE.player.x,STATE.player.y);const a2=Math.atan2(fs2.y-STATE.player.y,fs2.x-STATE.player.x);if(d2<600)fs2.chaseTime=(fs2.chaseTime||0)+dt;else if(d2>800)fs2.chaseTime=Math.max(0,(fs2.chaseTime||0)-dt*2);const phase=fs2.chaseTime<8000?0:fs2.chaseTime<18000?1:2;const spdMul=1+phase*0.35;const cdMul=[1,0.7,0.45][phase];fs2.dashTimer-=dt;fs2.attackTimer-=dt;fs2.trailTimer-=dt;fs2.cloneTimer-=dt;fs2.ringTimer-=dt;if(fs2.tiredTimer>0)fs2.tiredTimer-=dt;if(!fs2.clones)fs2.clones=[];for(let i=fs2.clones.length-1;i>=0;i--){fs2.clones[i].life-=dt;if(fs2.clones[i].life<=0)fs2.clones.splice(i,1)}if(phase>=1&&fs2.cloneTimer<=0){fs2.cloneTimer=fs2.cloneCd*cdMul;for(let i=0;i<2;i++){const ca=rand(0,Math.PI*2),cd2=rand(150,300);fs2.clones.push({x:fs2.x+Math.cos(ca)*cd2,y:fs2.y+Math.sin(ca)*cd2,life:4000})}}if(phase>=2&&fs2.ringTimer<=0&&d2<500){fs2.ringTimer=fs2.ringCd;for(let i=0;i<16;i++){const ra=Math.PI*2*i/16;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(ra)*130,vy:Math.sin(ra)*130,damage:20,radius:6,life:1800,sourceId:-99,color:'#ff4400',isShockwave:true,baseRadius:6,maxRadius:45})}}if(!fs2.tiredTimer||fs2.tiredTimer<=0){if(d2<120&&fs2.dashTimer<=0&&d2>25){fs2.dashTimer=fs2.dashCd*cdMul;const ta=a2+rand(-0.8,0.8),dd=rand(300,500);fs2.x=STATE.player.x+Math.cos(ta)*dd;fs2.y=STATE.player.y+Math.sin(ta)*dd;for(let i=0;i<12;i++){const pa=Math.PI*2*i/12;STATE.particles.push({x:fs2.x,y:fs2.y,vx:Math.cos(pa)*100,vy:Math.sin(pa)*100,life:500,color:'#ff6600',radius:4})}fs2.tiredTimer=700;spawnFloatText(fs2.x,fs2.y-18,'😤','#ffaa00')}else if(d2<450){if(d2>40){fs2.x+=Math.cos(a2)*fs2.speed*spdMul*ds;fs2.y+=Math.sin(a2)*fs2.speed*spdMul*ds}if(fs2.attackTimer<=0&&d2>100){fs2.attackTimer=fs2.attackCd*cdMul;const n=phase>=2?5:3;for(let i=0;i<n;i++){const sa=-a2+rand(-0.3,0.3)+(i-Math.floor(n/2))*0.3;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(sa)*170,vy:Math.sin(sa)*170,damage:12+phase*4,radius:5,life:1400,sourceId:-99,color:'#ff8800'})}}}else{const wa=a2+Math.PI*0.4;fs2.x+=Math.cos(wa)*fs2.speed*0.5*spdMul*ds;fs2.y+=Math.sin(wa)*fs2.speed*0.5*spdMul*ds}}if(fs2.trailTimer<=0){fs2.trailTimer=120;for(let i=0;i<3;i++){STATE.particles.push({x:fs2.x+rand(-10,10),y:fs2.y+rand(-10,10),vx:rand(-25,25),vy:rand(-25,25),life:500+rand(-200,200),color:'#ffaa00',radius:2+rand(0,4)})}}const wh=getMapWH();fs2.x=clamp(fs2.x,fs2.radius,wh.W-fs2.radius);fs2.y=clamp(fs2.y,fs2.radius,wh.H-fs2.radius);if(!STATE.fireBuff){const capDist=(fs2.tiredTimer>0)?(STATE.player.radius+fs2.radius)*2.8:(STATE.player.radius+fs2.radius)*1.1;if(dist(STATE.player.x,STATE.player.y,fs2.x,fs2.y)<capDist){STATE.fireBuff=true;STATE.fireBuffTextTimer=3000;STATE.fireSeed=null;for(let i=0;i<15;i++){const pa=Math.PI*2*i/15;STATE.particles.push({x:STATE.player.x,y:STATE.player.y,vx:Math.cos(pa)*120,vy:Math.sin(pa)*120,life:700,color:'#ffaa00',radius:5})}spawnFloatText(STATE.player.x,STATE.player.y-60,'火种之力!','#ff8800');triggerShake(10,500)}}}checkPortal();updateNarrator(dt);
+  updateSpawning(dt);if(STATE.fireSeed&&STATE.wave.number>=15){let fs2=STATE.fireSeed;const d2=dist(fs2.x,fs2.y,STATE.player.x,STATE.player.y);const a2=Math.atan2(fs2.y-STATE.player.y,fs2.x-STATE.player.x);if(d2<600)fs2.chaseTime=(fs2.chaseTime||0)+dt;else if(d2>800)fs2.chaseTime=Math.max(0,(fs2.chaseTime||0)-dt*2);const phase=fs2.chaseTime<8000?0:fs2.chaseTime<18000?1:2;const spdMul=1+phase*0.35;const cdMul=[1,0.7,0.45][phase];fs2.dashTimer-=dt;fs2.attackTimer-=dt;fs2.trailTimer-=dt;fs2.cloneTimer-=dt;fs2.ringTimer-=dt;if(fs2.tiredTimer>0)fs2.tiredTimer-=dt;if(!fs2.clones)fs2.clones=[];for(let i=fs2.clones.length-1;i>=0;i--){fs2.clones[i].life-=dt;if(fs2.clones[i].life<=0)fs2.clones.splice(i,1)}if(phase>=1&&fs2.cloneTimer<=0){fs2.cloneTimer=fs2.cloneCd*cdMul;for(let i=0;i<2;i++){const ca=rand(0,Math.PI*2),cd2=rand(150,300);fs2.clones.push({x:fs2.x+Math.cos(ca)*cd2,y:fs2.y+Math.sin(ca)*cd2,life:4000})}}if(phase>=2&&fs2.ringTimer<=0&&d2<500){fs2.ringTimer=fs2.ringCd;for(let i=0;i<16;i++){const ra=Math.PI*2*i/16;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(ra)*130,vy:Math.sin(ra)*130,damage:20,radius:6,life:1800,sourceId:-99,color:'#ff4400',isShockwave:true,baseRadius:6,maxRadius:45})}}if(!fs2.tiredTimer||fs2.tiredTimer<=0){if(d2<120&&fs2.dashTimer<=0&&d2>25){fs2.dashTimer=fs2.dashCd*cdMul;const ta=a2+rand(-0.8,0.8),dd=rand(300,500);fs2.x=STATE.player.x+Math.cos(ta)*dd;fs2.y=STATE.player.y+Math.sin(ta)*dd;for(let i=0;i<12;i++){const pa=Math.PI*2*i/12;STATE.particles.push({x:fs2.x,y:fs2.y,vx:Math.cos(pa)*100,vy:Math.sin(pa)*100,life:500,color:'#ff6600',radius:4})}fs2.tiredTimer=700;spawnFloatText(fs2.x,fs2.y-18,'😤','#ffaa00')}else if(d2<450){if(d2>40){fs2.x+=Math.cos(a2)*fs2.speed*spdMul*ds;fs2.y+=Math.sin(a2)*fs2.speed*spdMul*ds}if(fs2.attackTimer<=0&&d2>100){fs2.attackTimer=fs2.attackCd*cdMul;const n=phase>=2?5:3;for(let i=0;i<n;i++){const sa=-a2+rand(-0.3,0.3)+(i-Math.floor(n/2))*0.3;STATE.enemyProjectiles.push({x:fs2.x,y:fs2.y,vx:Math.cos(sa)*170,vy:Math.sin(sa)*170,damage:12+phase*4,radius:5,life:1400,sourceId:-99,color:'#ff8800'})}}}else{const wa=a2+Math.PI*0.4;fs2.x+=Math.cos(wa)*fs2.speed*0.5*spdMul*ds;fs2.y+=Math.sin(wa)*fs2.speed*0.5*spdMul*ds}}if(fs2.trailTimer<=0){fs2.trailTimer=120;for(let i=0;i<3;i++){STATE.particles.push({x:fs2.x+rand(-10,10),y:fs2.y+rand(-10,10),vx:rand(-25,25),vy:rand(-25,25),life:500+rand(-200,200),color:'#ffaa00',radius:2+rand(0,4)})}}const wh=getMapWH();fs2.x=clamp(fs2.x,fs2.radius,wh.W-fs2.radius);fs2.y=clamp(fs2.y,fs2.radius,wh.H-fs2.radius);if(!STATE.fireBuff){const capDist=(fs2.tiredTimer>0)?(STATE.player.radius+fs2.radius)*2.8:(STATE.player.radius+fs2.radius)*1.1;if(dist(STATE.player.x,STATE.player.y,fs2.x,fs2.y)<capDist){STATE.fireBuff=true;STATE.fireBuffTextTimer=3000;STATE.fireSeed=null;STATE.mapState.field.fireSeed=null;STATE.mapState.fireField.fireSeed=null;for(let i=0;i<15;i++){const pa=Math.PI*2*i/15;STATE.particles.push({x:STATE.player.x,y:STATE.player.y,vx:Math.cos(pa)*120,vy:Math.sin(pa)*120,life:700,color:'#ffaa00',radius:5})}spawnFloatText(STATE.player.x,STATE.player.y-60,'火种之力!','#ff8800');triggerShake(10,500)}}}checkPortal();updateNarrator(dt);
   // 敌人移动 + 远程AI + 精英智能 + BOSS智能
   for(const e of STATE.enemies){
     if(e.isWave15Boss&&STATE.currentMap==='fireField')continue;
@@ -1535,7 +1561,9 @@ function update(dt){
         }
       }
       // 移动追踪
-      if(!e.charging){if(d>0.5){e.x+=dx*e.speed*ds;e.y+=dy*e.speed*ds}}
+      if(e._stormSpeed>0)e._stormSpeed-=dt;
+      const spdMul2=e.isWave10Boss&&e.attackPhase===3?1.3:1;
+      if(!e.charging){if(d>0.5){e.x+=dx*e.speed*spdMul2*ds;e.y+=dy*e.speed*spdMul2*ds}}
       // 冲刺攻击 (独立于攻击循环)
       if(!e.charging){e.chargeTimer=(e.chargeTimer||0)-dt}
       if(e.charging){
@@ -1548,7 +1576,7 @@ function update(dt){
       // 攻击模式循环 (wave15有5阶段)
       if(e.specialTimer<=0){
         e.attackPhase=(e.attackPhase+1)%(e.isWave15Boss?5:4);
-        e.specialTimer=((e.isWave15Boss?600:e.isWave10Boss?2200:2800)+rand(-133,133))*enrageMult;
+        e.specialTimer=((e.isWave15Boss?600:e.isWave10Boss?1800:2800)+rand(-133,133))*enrageMult;
       }
       if(e.shootTimer<=0&&d<(e.isWave15Boss?1500:e.isWave10Boss?900:750)){
         const spd=CONFIG.ENEMY_PROJECTILE.speed;
@@ -1562,11 +1590,12 @@ function update(dt){
               STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*1.1,vy:Math.sin(a)*spd*1.1,damage:Math.floor(atkDmg*0.6),radius:CONFIG.ENEMY_PROJECTILE.radius+1,life:7000,sourceId:e.id,color:'#ff4422'});
             }
           }else if(e.isWave10Boss){
-            e.shootTimer=(800+rand(-150,150))*enrageMult;
+            // 冰锥扇射: 8发宽扇形冰锥，快速大颗
+            e.shootTimer=(900+rand(-150,150))*enrageMult;
             const ba=Math.atan2(leadY-e.y,leadX-e.x);
-            for(let i=0;i<6;i++){
-              const a=ba+(i-2.5)*0.4;
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.55,vy:Math.sin(a)*spd*0.55,damage:Math.floor(e.atk*0.9),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:3500,sourceId:e.id,color:'#44aaff'});
+            for(let i=0;i<8;i++){
+              const a=ba+(i-3.5)*0.23;
+              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.85,vy:Math.sin(a)*spd*0.85,damage:Math.floor(e.atk*0.8),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2400,sourceId:e.id,color:'#44ccff'});
             }
           }else{
             e.shootTimer=(1600+rand(-300,300))*enrageMult;
@@ -1586,11 +1615,16 @@ function update(dt){
               STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.95,vy:Math.sin(a)*spd*0.95,damage:Math.floor(atkDmg*0.5),radius:CONFIG.ENEMY_PROJECTILE.radius+1,life:6000,sourceId:e.id,color:'#ff8800'});
             }
           }else if(e.isWave10Boss){
-            e.shootTimer=(1000+rand(-200,200))*enrageMult;
-            for(let i=0;i<10;i++){
-              const a=Math.PI*2*i/10+rand(-0.1,0.1);
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.5,vy:Math.sin(a)*spd*0.5,damage:Math.floor(e.atk*0.65),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:2800,sourceId:e.id,color:'#66ccff'});
+            // 冰霜新星: 在玩家附近生成3个冰爆区域，延迟膨胀造成伤害
+            e.shootTimer=(1400+rand(-200,200))*enrageMult;
+            for(let j=0;j<3;j++){
+              const nx=p.x+rand(-250,250),ny=p.y+rand(-250,250);
+              for(let i=0;i<8;i++){
+                const a=Math.PI*2*i/8;
+                STATE.enemyProjectiles.push({x:nx,y:ny,vx:Math.cos(a)*30,vy:Math.sin(a)*30,damage:Math.floor(e.atk*0.55),radius:4,life:1400,sourceId:e.id,color:'#88ddff',isShockwave:true,baseRadius:4,maxRadius:75});
+              }
             }
+            spawnFloatText(e.x,e.y-50,'❄️ 冰霜新星!','#88ddff');
           }else{
             e.shootTimer=(2000+rand(-300,300))*enrageMult;
             for(let i=0;i<8;i++){
@@ -1607,11 +1641,13 @@ function update(dt){
               STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.5,vy:Math.sin(a)*spd*0.5,damage:Math.floor(atkDmg*0.9),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:8000,sourceId:e.id,color:'#cc44ff',homing:0.7});
             }
           }else if(e.isWave10Boss){
-            e.shootTimer=(1400+rand(-200,200))*enrageMult;
-            for(let i=0;i<2;i++){
-              const a=Math.atan2(p.y-e.y,p.x-e.x)+rand(-0.25,0.25);
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.4,vy:Math.sin(a)*spd*0.4,damage:Math.floor(e.atk*1.3),radius:CONFIG.ENEMY_PROJECTILE.radius+4,life:5000,sourceId:e.id,color:'#aa44ff',homing:0.9,healOnHit:Math.floor(e.maxHp*0.03)});
+            // 吸血冰晶: 3发强追踪弹，击中后为BOSS回复生命
+            e.shootTimer=(1700+rand(-250,250))*enrageMult;
+            for(let i=0;i<3;i++){
+              const a=Math.atan2(p.y-e.y,p.x-e.x)+rand(-0.4,0.4);
+              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.35,vy:Math.sin(a)*spd*0.35,damage:Math.floor(e.atk*1.4),radius:CONFIG.ENEMY_PROJECTILE.radius+5,life:6000,sourceId:e.id,color:'#cc66ff',homing:1.2,healOnHit:Math.floor(e.maxHp*0.05)});
             }
+            spawnFloatText(e.x,e.y-50,'💜 灵魂吸取!','#cc66ff');
           }else{
             e.shootTimer=(2200+rand(-300,300))*enrageMult;
             for(let i=0;i<3;i++){
@@ -1629,16 +1665,18 @@ function update(dt){
               STATE.enemyProjectiles.push({x:sx,y:sy,vx:Math.cos(la)*spd*1.2,vy:Math.sin(la)*spd*1.2,damage:Math.floor(atkDmg*1.2),radius:5,life:5000,sourceId:e.id,color:'#ff0000'});
             }
           }else if(e.isWave10Boss){
-            e.shootTimer=(1000+rand(-200,200))*enrageMult;
+            // 极寒风暴: 12方向环形+5发瞄准扇射，BOSS加速
+            e.shootTimer=(1200+rand(-200,200))*enrageMult;
+            for(let i=0;i<12;i++){
+              const a=Math.PI*2*i/12+rand(-0.08,0.08);
+              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.7,vy:Math.sin(a)*spd*0.7,damage:Math.floor(e.atk*0.6),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:2200,sourceId:e.id,color:'#66ddff'});
+            }
             const ba=Math.atan2(leadY-e.y,leadX-e.x);
-            for(let i=0;i<6;i++){
-              const a=ba+(i-2.5)*0.35;
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.85,vy:Math.sin(a)*spd*0.85,damage:Math.floor(e.atk*0.7),radius:CONFIG.ENEMY_PROJECTILE.radius+2,life:3000,sourceId:e.id,color:'#44bbff'});
+            for(let i=0;i<5;i++){
+              const a=ba+(i-2)*0.28;
+              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.55,vy:Math.sin(a)*spd*0.55,damage:Math.floor(e.atk*0.85),radius:CONFIG.ENEMY_PROJECTILE.radius+3,life:2800,sourceId:e.id,color:'#aaddff'});
             }
-            for(let i=0;i<6;i++){
-              const a=Math.PI*2*i/6;
-              STATE.enemyProjectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*spd*0.55,vy:Math.sin(a)*spd*0.55,damage:Math.floor(e.atk*0.5),radius:CONFIG.ENEMY_PROJECTILE.radius+1,life:2200,sourceId:e.id,color:'#88ddff'});
-            }
+            e._stormSpeed=1200;
           }else{
             e.shootTimer=(2400+rand(-400,400))*enrageMult;
             for(let i=0;i<3;i++){
@@ -1738,10 +1776,10 @@ function clampMazePos(x,y,r,maze){
 function switchMap(targetMap){
   if(STATE.currentMap===targetMap)return;
   const old=STATE.currentMap,slot=STATE.mapState[old];
-  slot.enemies=STATE.enemies;slot.drops=STATE.drops;slot.projectiles=STATE.projectiles;slot.enemyProjectiles=STATE.enemyProjectiles;slot.particles=STATE.particles;slot.floatTexts=STATE.floatTexts;slot.fireSeed=STATE.fireSeed;slot.wave={...STATE.wave};
+  slot.enemies=STATE.enemies;slot.drops=STATE.drops;slot.projectiles=STATE.projectiles;slot.enemyProjectiles=STATE.enemyProjectiles;slot.particles=STATE.particles;slot.floatTexts=STATE.floatTexts;slot.fireSeed=STATE.fireBuff?null:STATE.fireSeed;slot.wave={...STATE.wave};
   const savedWaveNumber=STATE.wave.number;
   STATE.currentMap=targetMap;const tgt=STATE.mapState[targetMap];
-  STATE.enemies=tgt.enemies;STATE.drops=tgt.drops;STATE.projectiles=tgt.projectiles;STATE.enemyProjectiles=tgt.enemyProjectiles;STATE.particles=tgt.particles;STATE.floatTexts=tgt.floatTexts;STATE.fireSeed=tgt.fireSeed;
+  STATE.enemies=tgt.enemies;STATE.drops=tgt.drops;STATE.projectiles=tgt.projectiles;STATE.enemyProjectiles=tgt.enemyProjectiles;STATE.particles=tgt.particles;STATE.floatTexts=tgt.floatTexts;STATE.fireSeed=STATE.fireBuff?null:tgt.fireSeed;
   if(targetMap==='fireField'){STATE.wave={number:savedWaveNumber,totalEnemies:1,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:9e9,spawnInterval:9e9,waveDelay:9e9,waveDelayTimer:9e9,transitioning:true};for(let i=STATE.enemies.length-1;i>=0;i--){if(STATE.enemies[i].type==='boss')STATE.enemies.splice(i,1)}}
   else if(tgt.wave){STATE.wave=tgt.wave}else{STATE.wave={number:1,totalEnemies:5,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:0,spawnInterval:350,waveDelay:1500,waveDelayTimer:0,transitioning:false};initWave(1)}
   const cell=CONFIG.MAZE_CELL;
