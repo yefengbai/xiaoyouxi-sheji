@@ -141,7 +141,10 @@ canvas{
       <span id="hud-regen-disp" style="display:none">💚 <span class="val" id="hud-regen">0</span>/s</span>
       <span id="hud-combo-disp" style="display:none;color:#ffd700">✂️ <span class="val" id="hud-combo">0</span>KILL</span>
       <span id="hud-bonus-disp" style="display:none;color:#5badff">📈 <span class="val" id="hud-bonus"></span></span>
+      <span id="hud-skill-disp" style="color:#ffd700">⚡ <span class="val" id="hud-skill">就绪</span></span>
       <span style="margin-left:auto;display:flex;gap:6px;position:relative" id="btn-settings">
+        <span style="font-size:7px;color:#f0883e;display:flex;align-items:center;margin-right:4px;line-height:1.2">拖到旁白<br>身上击晕</span>
+        <button class="btn" id="btn-hammer" onmousedown="smiteNarrator(event)" style="font-size:18px;padding:4px 12px;border-color:#f0883e;background:rgba(240,136,62,0.15)" title="锤旁白">🔨</button>
         <button class="btn" id="btn-pause" onclick="togglePause()">⏸ PAUSE</button>
         <button class="btn" id="btn-settings-btn" onclick="toggleSettings()" style="border-color:var(--accent)">⚙</button>
         <div id="settings-dropdown">
@@ -249,13 +252,13 @@ canvas{
    CONFIG
    ============================================================ */
 const CONFIG = {
-  WORLD_W:2000,WORLD_H:2000,FIRE_WORLD_W:5000,FIRE_WORLD_H:5000,VIEW_W:1152,VIEW_H:864,NARRATOR:{radius:18,speed:160,textCD:4000,stunDuration:2000},
+  WORLD_W:2000,WORLD_H:2000,FIRE_WORLD_W:5000,FIRE_WORLD_H:5000,VIEW_W:1152,VIEW_H:864,NARRATOR:{radius:18,speed:240,textCD:2000,stunDuration:1000},
 
   PLAYER:{
     hp:100,maxHp:100,atk:10,speed:260,atkSpd:650,radius:13,invincibleMs:300,
     hpRegen:0,pickupRange:55,level:1,xp:0,xpToNext:50,gold:0,
     // 输出
-    armorPen:0,comboChance:0,poisonDmg:0,executeBonus:0,
+    armorPen:0,comboChance:0,poisonDmg:0,executeBonus:0,critChance:0,critMult:2.0,
     // 肉盾
     lifesteal:0,reflect:0,damageReduction:0,shield:0,maxShield:0,
     // 发育
@@ -308,6 +311,7 @@ const CONFIG = {
     {id:'comboChance',name:'连击',    icon:'✂️',min:3, max:8,unit:'%',desc:'几率双发弹幕',cat:'atk'},
     {id:'poison',     name:'毒素',    icon:'☠️',min:2, max:6,unit:'/s',desc:'攻击附带中毒\n持续3秒',cat:'atk'},
     {id:'execute',    name:'斩杀',    icon:'💀',min:7, max:18,unit:'%',desc:'对30%血以下\n敌人额外伤害',cat:'atk'},
+    {id:'critChance', name:'暴击率',  icon:'💥',min:3, max:8,unit:'%',desc:'几率造成双倍伤害',cat:'atk'},
     // 肉盾流
     {id:'maxHp',      name:'最大生命',icon:'❤️',min:15,max:30,unit:'',  desc:'提升生命上限\n并回复等量HP',cat:'def'},
     {id:'hpRegen',    name:'生命回复',icon:'💚',min:0.5,max:1.3,unit:'/s',desc:'每秒回复生命',cat:'def'},
@@ -333,10 +337,15 @@ const CONFIG = {
     {id:'permXp', name:'经验加成', icon:'📖', desc:'每级 +3% 经验', maxLv:8, costBase:35, costMult:1.5},
     {id:'permGoldB', name:'金币加成', icon:'💰', desc:'每级 +3% 金币', maxLv:8, costBase:35, costMult:1.5},
   ],
+  CLASS_SKILLS:{
+    atk: {name:'狂暴',icon:'🔥',desc:'4秒攻速翻倍+伤害+50%',dur:4000,cd:25000},
+    def: {name:'铁壁',icon:'🛡️',desc:'3秒无敌+反弹200%',dur:3000,cd:30000},
+    farm:{name:'磁暴',icon:'🧲',desc:'吸取全屏掉落+3秒移速翻倍',dur:3000,cd:18000},
+  }
 };
 
 const STATE={
-  screen:'start',paused:false,muted:false,musicMuted:false,musicVolume:70,timeSpeed:1,playerClass:null,
+  screen:'start',paused:false,muted:false,musicMuted:false,musicVolume:70,timeSpeed:1,playerClass:null,skillActive:0,skillCooldown:0,skillCooldownMax:0,hammerCd:0,_draggingHammer:false,_frenzyEnd:0,_ironWallEnd:0,_magnetEnd:0,
   player:{...CONFIG.PLAYER},
   enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],
   wave:{number:1,totalEnemies:5,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:0,spawnInterval:350,waveDelay:1500,waveDelayTimer:0,transitioning:false},
@@ -364,6 +373,7 @@ const DOM={
   hudRegen:$('hud-regen'),hudRegenDisp:$('hud-regen-disp'),hudLvTop:$('hud-lv-top'),
   hudDiff:$('hud-diff'),hudShield:$('hud-shield'),hudShieldDisp:$('hud-shield-disp'),
   hudCombo:$('hud-combo'),hudComboDisp:$('hud-combo-disp'),hudBonus:$('hud-bonus'),hudBonusDisp:$('hud-bonus-disp'),
+  hudSkillDisp:$('hud-skill-disp'),hudSkill:$('hud-skill'),
 };
 const ctx=DOM.canvas.getContext('2d'),mctx=DOM.minimap.getContext('2d');
 
@@ -519,8 +529,9 @@ function triggerShake(i,d){STATE.screenShake.intensity=Math.max(STATE.screenShak
    输入
    ============================================================ */
 function initInput(){
-  window.addEventListener('keydown',e=>{STATE.keys[e.key]=true;STATE.keys[e.code]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();if(e.code==='Space'&&STATE.screen==='playing'){e.preventDefault();togglePause()}if(e.code==='KeyE'&&STATE.screen==='playing'){e.preventDefault();toggleSpeed()}});
+  window.addEventListener('keydown',e=>{STATE.keys[e.key]=true;STATE.keys[e.code]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();if(e.code==='Space'&&STATE.screen==='playing'){e.preventDefault();togglePause()}if(e.code==='KeyE'&&STATE.screen==='playing'){e.preventDefault();toggleSpeed()}if(e.code==='KeyQ'&&STATE.screen==='playing'){e.preventDefault();activateSkill()}});
   window.addEventListener('keyup',e=>{STATE.keys[e.key]=false;STATE.keys[e.code]=false});
+  window.addEventListener('mouseup',e=>{if(STATE._draggingHammer){const cam=getCamera();const r=DOM.canvas.getBoundingClientRect();const mx=(e.clientX-r.left)*(CONFIG.VIEW_W/r.width);const my=(e.clientY-r.top)*(CONFIG.VIEW_H/r.height);const wx=mx+cam.x,wy=my+cam.y;const nr=STATE.narrator;if(nr&&nr.stunned<=0&&dist(wx,wy,nr.x,nr.y)<40){const isBoss=STATE.wave.bossActive||STATE.boss10Active;const st=isBoss?3000:5000;nr.stunned=st;STATE.narratorStun=st;nr.text='啊啊啊!好痛!';nr.textTimer=2000;spawnParticles(nr.x,nr.y,'#f0883e',25);triggerShake(isBoss?10:12,400);spawnFloatText(nr.x,nr.y-40,'锤击!','#f0883e')}else{spawnFloatText(wx,wy-10,'MISS','#ff4444')}STATE._draggingHammer=false;STATE.hammerCd=7000}});
   DOM.canvas.addEventListener('mousemove',e=>{const r=DOM.canvas.getBoundingClientRect();STATE.mouse.x=(e.clientX-r.left)*(CONFIG.VIEW_W/r.width);STATE.mouse.y=(e.clientY-r.top)*(CONFIG.VIEW_H/r.height)});
   document.addEventListener('click',initAudio,{once:true});document.addEventListener('keydown',initAudio,{once:true});
 }
@@ -587,7 +598,7 @@ function initWave(n){
   initNarrator(n);
 }
 function initNarrator(wn){
-  const wh=getMapWH();STATE.narrator={x:wh.W/2+rand(-300,300),y:wh.H/2+rand(-200,200),text:'',textTimer:0,trickCD:0,trickInterval:wn<=3?6000:wn<=8?4500:wn<=12?3500:2800,stunned:0,wave:wn};
+  const wh=getMapWH();STATE.narrator={x:wh.W/2+rand(-300,300),y:wh.H/2+rand(-200,200),text:'',textTimer:0,trickCD:0,trickInterval:wn<=3?3500:wn<=8?2500:wn<=12?2000:1500,stunned:0,wave:wn};
   STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorStun=0;STATE.narratorPuddles=[];STATE.narratorStealGold=0;
   const says={1:'欢迎来到这个世界!嘿嘿~',2:'那边的宝箱看起来不错哦!',3:'地板有点滑,小心脚下~',4:'你的方向感还好吗?',5:'敌人们,我来帮你们!',6:'谁是真的谁是假的呢?',7:'你的金币真好看,借我玩玩!',8:'来,大家回回血~',9:'嗖!传送的感觉如何?',10:'BOSS大人,请收下我的力量!',11:'镜子里的是谁?',12:'开箱有惊喜!',13:'兄弟们出来吧!',14:'此路不通,绕路吧~',15:'你休想找到火种入口!'};
   STATE.narrator.text=says[wn]||'嘿嘿~';STATE.narrator.textTimer=3000;
@@ -597,32 +608,32 @@ function updateNarrator(dt){
   const n=STATE.narrator;const p=STATE.player;const d=dist(n.x,n.y,p.x,p.y);
   n.textTimer-=dt;n.trickCD-=dt;if(n.stunned>0)n.stunned-=dt;
   if(n.stunned<=0){
-    if(d<250){const a=Math.atan2(n.y-p.y,n.x-p.x);n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*1.3*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*1.3*(dt/1000)}
+    if(d<250){const a=Math.atan2(n.y-p.y,n.x-p.x);n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*1.8*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*1.8*(dt/1000);if(Math.random()<0.02){STATE.narratorPuddles.push({x:n.x,y:n.y,life:3000});if(STATE.narratorPuddles.length>6)STATE.narratorPuddles.shift()}}
     else if(d>500){const a=Math.atan2(p.y-n.y,p.x-n.x);n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*0.7*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*0.7*(dt/1000)}
     else{const a=Math.atan2(n.y-p.y,n.x-p.x)+Math.PI*0.5;n.x+=Math.cos(a)*CONFIG.NARRATOR.speed*0.5*(dt/1000);n.y+=Math.sin(a)*CONFIG.NARRATOR.speed*0.5*(dt/1000)}
   }
   const wh=getMapWH();n.x=clamp(n.x,30,wh.W-30);n.y=clamp(n.y,30,wh.H-30);
   if(n.textTimer<=0&&n.stunned<=0){n.textTimer=CONFIG.NARRATOR.textCD;const quips={1:['快来追我呀~','这个送给你!','嘿嘿,捡起来看看?'],2:['大宝藏哦!','不去看看可惜了~'],3:['滑溜溜!','站不稳了吧~'],4:['左边?右边?','方向键坏了?'],5:['加油加油!','更强更强!'],6:['真真假假~','打我呀笨蛋~'],7:['金币哗啦啦~','还给你?才不!'],8:['绿光治疗!','满血复活!'],9:['到了没?','惊喜不惊喜?'],10:['BOSS无敌!','颤抖吧!'],11:['谁是真的?','打错了哦~'],12:['轰!','惊喜变惊吓!'],13:['人海战术!','兄弟们上!'],14:['过不去吧?','绕路绕路~'],15:['火种?不存在的!','放弃吧!']};const q=quips[n.wave]||['嘿嘿~','来抓我呀~'];n.text=q[Math.floor(Math.random()*q.length)];n.textTimer=CONFIG.NARRATOR.textCD}
   for(let i=STATE.projectiles.length-1;i>=0;i--){const pr=STATE.projectiles[i];if(dist(pr.x,pr.y,n.x,n.y)<(n.radius||18)+pr.radius){STATE.projectiles.splice(i,1);n.stunned=CONFIG.NARRATOR.stunDuration;STATE.narratorStun=CONFIG.NARRATOR.stunDuration;n.text='啊啊!别打我!';n.textTimer=2000;spawnParticles(n.x,n.y,'#cc44ff',10);break}}
-  narratorTrick(dt);
+  narratorTrick(dt);if(n&&n.stunned<=0&&dist(n.x,n.y,p.x,p.y)<180&&Math.random()<0.03){triggerShake(5,200);spawnFloatText(p.x,p.y-30,'旁白逼近!','#cc44ff')}
 }
 function narratorTrick(dt){
   const n=STATE.narrator;if(!n||n.stunned>0)return;const p=STATE.player;const wn=n.wave;
-  if(wn===1){if(n.trickCD<=0){n.trickCD=n.trickInterval;const fx=p.x+rand(-120,120),fy=p.y+rand(-120,120);STATE.narratorFakeDrops.push({x:fx,y:fy,life:8000,type:'gold'});if(STATE.narratorFakeDrops.length>4)STATE.narratorFakeDrops.shift()}}
-  if(wn===2){if(n.trickCD<=0){n.trickCD=n.trickInterval;if(STATE.narratorFakeDrops.length===0)STATE.narratorFakeDrops.push({x:p.x+rand(-200,200),y:p.y+rand(-200,200),life:15000,type:'skill',big:true})}}
-  if(wn===3){if(n.trickCD<=0){n.trickCD=2000;STATE.narratorPuddles.push({x:p.x+rand(-100,100),y:p.y+rand(-80,80),life:4000});if(STATE.narratorPuddles.length>3)STATE.narratorPuddles.shift()}}
-  if(wn===4){if(n.trickCD<=0){n.trickCD=n.trickInterval;STATE._controlReverse=1500}}
-  if(wn===5){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<400){e.speed=Math.floor(e.speed*1.4);e.atk=Math.floor(e.atk*1.3);spawnFloatText(e.x,e.y-20,'↑','#ff4444')}}}}
-  if(wn===6){if(n.trickCD<=0&&STATE.narratorFakeEnemies.length<3){n.trickCD=n.trickInterval;for(let i=0;i<3;i++){STATE.narratorFakeEnemies.push({x:p.x+rand(-300,300),y:p.y+rand(-300,300),life:10000,type:pickEnemyType(),vx:rand(-40,40),vy:rand(-40,40)})}}}
-  if(wn===7){if(n.trickCD<=0&&dist(n.x,n.y,p.x,p.y)<120){n.trickCD=n.trickInterval;const steal=Math.floor(p.gold*0.15);p.gold-=steal;STATE.narratorStealGold+=steal;n.text='偷了'+steal+'金币!';n.textTimer=2000}}
-  if(wn===8){if(n.trickCD<=0){n.trickCD=n.trickInterval*0.7;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<350){e.hp=Math.min(e.maxHp||e.hp*2,e.hp+(e.maxHp||e.hp)*0.08);spawnFloatText(e.x,e.y-20,'+','#44ff44')}}}}
-  if(wn===9){if(n.trickCD<=0){n.trickCD=n.trickInterval;const ta=rand(0,Math.PI*2),td=rand(250,450);STATE.player.x=p.x+Math.cos(ta)*td;STATE.player.y=p.y+Math.sin(ta)*td;const wh=getMapWH();STATE.player.x=clamp(STATE.player.x,20,wh.W-20);STATE.player.y=clamp(STATE.player.y,20,wh.H-20);STATE.invincibleTimer=300;spawnParticles(p.x,p.y,'#cc44ff',12)}}
-  if(wn===10){const boss=STATE.enemies.find(e=>e.type==='boss');if(boss&&n.trickCD<=0){n.trickCD=n.trickInterval;boss.speed=Math.floor(boss.speed*1.15);boss.atk=Math.floor(boss.atk*1.1);spawnFloatText(boss.x,boss.y-40,'旁白之力!','#cc44ff')}}
+  if(wn===1){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(let i=0;i<2;i++){const fx=p.x+rand(-150,150),fy=p.y+rand(-150,150);STATE.narratorFakeDrops.push({x:fx,y:fy,life:10000,type:'gold'})}if(STATE.narratorFakeDrops.length>6)STATE.narratorFakeDrops.splice(0,2)}}
+  if(wn===2){if(n.trickCD<=0){n.trickCD=n.trickInterval*0.7;STATE.narratorFakeDrops.push({x:p.x+rand(-250,250),y:p.y+rand(-250,250),life:18000,type:'skill',big:true});if(STATE.narratorFakeDrops.length>6)STATE.narratorFakeDrops.shift()}}
+  if(wn===3){if(n.trickCD<=0){n.trickCD=2000;STATE.narratorPuddles.push({x:p.x+rand(-140,140),y:p.y+rand(-120,120),life:7000});if(STATE.narratorPuddles.length>6)STATE.narratorPuddles.shift()}}
+  if(wn===4){if(n.trickCD<=0){n.trickCD=n.trickInterval;STATE._controlReverse=3000;n.text='方向反啦!';n.textTimer=1500}}
+  if(wn===5){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<500){e.speed=Math.floor(e.speed*1.5);e.atk=Math.floor(e.atk*1.4);spawnFloatText(e.x,e.y-20,'↑↑','#ff4444')}}STATE.narratorPuddles.push({x:p.x+rand(-100,100),y:p.y+rand(-80,80),life:5000});if(STATE.narratorPuddles.length>6)STATE.narratorPuddles.shift()}}
+  if(wn===6){if(n.trickCD<=0&&STATE.narratorFakeEnemies.length<3){n.trickCD=n.trickInterval;for(let i=0;i<5;i++){STATE.narratorFakeEnemies.push({x:p.x+rand(-350,350),y:p.y+rand(-350,350),life:12000,type:pickEnemyType(),vx:rand(-60,60),vy:rand(-60,60)})}}}
+  if(wn===7){if(n.trickCD<=0&&dist(n.x,n.y,p.x,p.y)<160){n.trickCD=n.trickInterval*0.6;const steal=Math.floor(p.gold*0.25);p.gold-=steal;STATE.narratorStealGold+=steal;n.text='偷了'+steal+'金币!';n.textTimer=2000;spawnFloatText(p.x,p.y-30,'-'+steal+'G','#ff4444')}}
+  if(wn===8){if(n.trickCD<=0){n.trickCD=n.trickInterval*0.7;for(const e of STATE.enemies){if(dist(e.x,e.y,n.x,n.y)<400){e.hp=Math.min((e.maxHp||e.hp*2),e.hp+(e.maxHp||e.hp)*0.12);spawnFloatText(e.x,e.y-20,'++','#44ff44')}}STATE._controlReverse=1200}}
+  if(wn===9){if(n.trickCD<=0){n.trickCD=n.trickInterval;const ta=rand(0,Math.PI*2),td=rand(350,550);STATE.player.x=p.x+Math.cos(ta)*td;STATE.player.y=p.y+Math.sin(ta)*td;const wh=getMapWH();STATE.player.x=clamp(STATE.player.x,20,wh.W-20);STATE.player.y=clamp(STATE.player.y,20,wh.H-20);STATE.invincibleTimer=150;spawnParticles(p.x,p.y,'#cc44ff',16);STATE.narratorPuddles.push({x:STATE.player.x,y:STATE.player.y,life:5000});if(STATE.narratorPuddles.length>6)STATE.narratorPuddles.shift()}}
+  if(wn===10){const boss=STATE.enemies.find(e=>e.type==='boss');if(boss&&n.trickCD<=0){n.trickCD=n.trickInterval*0.7;boss.speed=Math.floor(boss.speed*1.25);boss.atk=Math.floor(boss.atk*1.2);boss.hp=Math.min(boss.maxHp,boss.hp+boss.maxHp*0.05);spawnFloatText(boss.x,boss.y-40,'旁白之力!','#cc44ff')}}
   if(wn===11){if(n.trickCD<=0&&!STATE._doppelTimer){n.trickCD=n.trickInterval;STATE._doppel={x:p.x+rand(-150,150),y:p.y+rand(-150,150),life:6000};STATE._doppelTimer=6000}}
-  if(wn===12){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const d of STATE.drops){if(Math.random()<0.3){d.trap=true;d.color='#ff4444'}}}}
-  if(wn===13){if(n.trickCD<=0&&STATE.enemies.length<8){n.trickCD=n.trickInterval;for(let i=0;i<3;i++){STATE.enemies.push(createEnemy(pickEnemyType(),{x:p.x+rand(-350,350),y:p.y+rand(-350,350)}))}}}
-  if(wn===14){if(n.trickCD<=0){n.trickCD=3000;STATE.narratorWalls=STATE.narratorWalls||[];const wa=rand(0,Math.PI*2),wx=p.x+Math.cos(wa)*300,wy=p.y+Math.sin(wa)*300;STATE.narratorWalls.push({x:wx,y:wy,life:5000});if(STATE.narratorWalls.length>4)STATE.narratorWalls.shift()}}
-  if(wn===15){if(n.trickCD<=0){n.trickCD=n.trickInterval;const boss=STATE.enemies.find(e=>e.type==='boss');if(boss){boss.hp=Math.min(boss.maxHp,boss.hp+boss.maxHp*0.01);spawnFloatText(boss.x,boss.y-30,'旁白治疗','#cc44ff')}if(STATE._hideFirePortal===undefined)STATE._hideFirePortal=false;STATE._hideFirePortal=Math.random()<0.5}}
+  if(wn===12){if(n.trickCD<=0){n.trickCD=n.trickInterval;for(const d of STATE.drops){if(Math.random()<0.45){d.trap=true;d.color='#ff4444'}}}}
+  if(wn===13){if(n.trickCD<=0&&STATE.enemies.length<12){n.trickCD=n.trickInterval*0.6;for(let i=0;i<5;i++){STATE.enemies.push(createEnemy(pickEnemyType(),{x:p.x+rand(-400,400),y:p.y+rand(-400,400)}))}}}
+  if(wn===14){if(n.trickCD<=0){n.trickCD=3000;STATE.narratorWalls=STATE.narratorWalls||[];const wa=rand(0,Math.PI*2),wx=p.x+Math.cos(wa)*300,wy=p.y+Math.sin(wa)*300;STATE.narratorWalls.push({x:wx,y:wy,life:8000});if(STATE.narratorWalls.length>6)STATE.narratorWalls.shift()}}
+  if(wn===15){if(n.trickCD<=0){n.trickCD=n.trickInterval*0.6;const boss=STATE.enemies.find(e=>e.type==='boss');if(boss){boss.hp=Math.min(boss.maxHp,boss.hp+boss.maxHp*0.02);boss.atk=Math.floor(boss.atk*1.05);spawnFloatText(boss.x,boss.y-30,'旁白治疗','#cc44ff')}if(STATE._hideFirePortal===undefined)STATE._hideFirePortal=false;STATE._hideFirePortal=Math.random()<0.6;STATE._controlReverse=1000}}
 }
 function updateSpawning(dt){
   const w=STATE.wave;
@@ -671,11 +682,12 @@ function updateCombat(dt){
     for(let j=STATE.enemies.length-1;j>=0;j--){
       const e=STATE.enemies[j];
       if(distSq(pr.x,pr.y,e.x,e.y)<(pr.radius+e.radius)*(pr.radius+e.radius)){
-        let dmg=pr.damage;
+        let dmg=pr.damage;if(STATE._frenzyEnd>0)dmg=Math.floor(dmg*1.5);
         // 斩杀: 30%血以下额外伤害
         if(e.hp/e.maxHp<0.3)dmg=Math.floor(dmg*(1+p.executeBonus/100));
+        let isCrit=false;if(Math.random()*100<p.critChance){dmg=Math.floor(dmg*p.critMult);isCrit=true}
         dealDamage(e,dmg);
-        spawnFloatText(e.x,e.y-e.radius,String(dmg),'#ffffff');spawnHitSpark(e.x,e.y);sfxHit();
+        spawnFloatText(e.x,e.y-e.radius,String(dmg),isCrit?'#ffd700':'#ffffff');if(isCrit)spawnFloatText(e.x,e.y-e.radius-16,'暴击!','#ff8800');spawnHitSpark(e.x,e.y);sfxHit();
         // 毒素
         if(p.poisonDmg>0){e.poisonTimer=3000;e.poisonDmg=p.poisonDmg}
         // 吸血 (HP<20%翻倍)
@@ -688,7 +700,7 @@ function updateCombat(dt){
   // 敌人弹幕命中玩家
   for(let i=STATE.enemyProjectiles.length-1;i>=0;i--){
     const ep=STATE.enemyProjectiles[i];
-    if(distSq(ep.x,ep.y,p.x,p.y)<(ep.radius+p.radius)*(ep.radius+p.radius)&&STATE.invincibleTimer<=0){
+    if(distSq(ep.x,ep.y,p.x,p.y)<(ep.radius+p.radius)*(ep.radius+p.radius)&&STATE.invincibleTimer<=0&&STATE._ironWallEnd<=0){
       let dmg=ep.damage;
       // 减伤
       if(p.damageReduction>0)dmg=Math.floor(dmg*(1-p.damageReduction/100));
@@ -696,7 +708,7 @@ function updateCombat(dt){
       if(p.shield>0){const abs=Math.min(p.shield,dmg);p.shield-=abs;dmg-=abs;p.shieldRegenTimer=5000}
       if(dmg>0){p.hp-=dmg;STATE.invincibleTimer=p.invincibleMs;spawnFloatText(p.x,p.y-p.radius,String(Math.floor(dmg)),'#f85149');triggerShake(3,120);sfxHurt()}if(ep.healOnHit>0){const src2=STATE.enemies.find(en=>en.id===ep.sourceId);if(src2&&src2.type==='boss'){src2.hp=Math.min(src2.maxHp,src2.hp+ep.healOnHit);spawnFloatText(src2.x,src2.y-30,'+'+Math.floor(ep.healOnHit),'#aa44ff')}}
       // 反伤
-      if(p.reflect>0){const ref=Math.floor(ep.damage*p.reflect/100);const src=STATE.enemies.find(e=>e.id===ep.sourceId);if(src)dealDamage(src,ref)}
+      if(p.reflect>0){const ref=Math.floor(ep.damage*(STATE._ironWallEnd>0?200:p.reflect)/100);const src=STATE.enemies.find(e=>e.id===ep.sourceId);if(src)dealDamage(src,ref)}
       STATE.enemyProjectiles.splice(i,1);
       if(p.hp<=0){if(STATE.boss10Revive){STATE.boss10Revive=false;p.hp=p.maxHp;p.shield=p.maxShield;STATE.invincibleTimer=2000;STATE.boss10ReviveText=3000;spawnFloatText(p.x,p.y-50,'自动复活!','#ffd700');spawnParticles(p.x,p.y,'#ffd700',20)}else{p.hp=0;gameOver();return}}
     }
@@ -705,12 +717,12 @@ function updateCombat(dt){
   for(const e of STATE.enemies){
     // 幽灵相位时无碰撞伤害
     if(e.type==='ghost'&&e.phaseTimer<1400)continue;
-    if(distSq(p.x,p.y,e.x,e.y)<(p.radius+e.radius)*(p.radius+e.radius)&&now-e.lastDmgTime>500&&STATE.invincibleTimer<=0){
+    if(distSq(p.x,p.y,e.x,e.y)<(p.radius+e.radius)*(p.radius+e.radius)&&now-e.lastDmgTime>500&&STATE.invincibleTimer<=0&&STATE._ironWallEnd<=0){
       let dmg=e.atk;
       if(p.damageReduction>0)dmg=Math.floor(dmg*(1-p.damageReduction/100));
       if(p.shield>0){const abs=Math.min(p.shield,dmg);p.shield-=abs;dmg-=abs;p.shieldRegenTimer=5000}
       if(dmg>0){p.hp-=dmg;e.lastDmgTime=now;STATE.invincibleTimer=p.invincibleMs;spawnFloatText(p.x,p.y-p.radius,String(Math.floor(dmg)),'#f85149');triggerShake(4,150);sfxHurt()}
-      if(p.reflect>0){const ref=Math.floor(e.atk*p.reflect/100);dealDamage(e,ref)}
+      if(p.reflect>0){const ref=Math.floor(e.atk*(STATE._ironWallEnd>0?200:p.reflect)/100);dealDamage(e,ref)}
       if(p.hp<=0){if(STATE.boss10Revive){STATE.boss10Revive=false;p.hp=p.maxHp;p.shield=p.maxShield;STATE.invincibleTimer=2000;STATE.boss10ReviveText=3000;spawnFloatText(p.x,p.y-50,'自动复活!','#ffd700');spawnParticles(p.x,p.y,'#ffd700',20)}else{p.hp=0;gameOver();return}}
     }
   }
@@ -738,7 +750,8 @@ function killEnemy(enemy){
     spawnParticles(enemy.x,enemy.y,'#ff4444',enemy.radius*2);spawnParticles(enemy.x,enemy.y,'#ffd700',enemy.radius);
   }else{sfxDeath()}
   const xpMult=1+STATE.player.xpBonus/100;
-  STATE.player.xp+=Math.floor(enemy.xpValue*xpMult);checkLevelUp();
+  const comboMult=Math.min(3,1+STATE.comboCount*0.1);
+  STATE.player.xp+=Math.floor(enemy.xpValue*xpMult*comboMult);checkLevelUp();
 }
 
 /* ============================================================
@@ -834,6 +847,7 @@ function selectUpgrade(uid){
     case'xpBonus':p.xpBonus+=Math.floor(val);break;
     case'goldBonus':p.goldBonus+=Math.floor(val);break;
     case'pickupRange':p.pickupRange+=Math.floor(val);break;
+    case'critChance':p.critChance=Math.min(75,p.critChance+Math.floor(val));break;
   }
   STATE.pendingUpgrades--;
   if(STATE.pendingUpgrades>0){
@@ -866,7 +880,7 @@ function render(){
   ctx.scale(scX,scY);
   ctx.translate(-cam.x+sx/scX,-cam.y+sy/scY);
   if(STATE.currentMap==='maze')drawMazeBg(cam);else if(STATE.currentMap==='fireField')drawFireMapBg(cam);else drawBackground(cam);
-  drawDrops();drawSpeedOrbs();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();drawNarratorStuff();
+  drawDrops();drawSpeedOrbs();drawEnemies();drawProjectiles();drawEnemyProjectiles();drawPlayer();drawParticles();drawFloatTexts();drawHammerDrag();drawNarratorStuff();
   const wh=getMapWH(),WW=wh.W,WH=wh.H;
   ctx.strokeStyle='rgba(255,50,50,0.5)';ctx.lineWidth=4;ctx.strokeRect(0,0,WW,WH);
   // 传送门
@@ -1191,6 +1205,17 @@ function drawPlayer(){
 }
 function drawParticles(){for(const p of STATE.particles){ctx.globalAlpha=p.life/p.maxLife;ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size)}ctx.globalAlpha=1}
 function drawFloatTexts(){for(const t of STATE.floatTexts){const a=t.life/t.maxLife;ctx.globalAlpha=a;ctx.fillStyle=t.color;ctx.font=`bold ${Math.floor(13*(1+(1-a)*0.5))}px "Press Start 2P","Courier New",monospace`;ctx.textAlign='center';ctx.fillText(t.text,t.x,t.y)}ctx.globalAlpha=1}
+function drawHammerDrag(){
+  if(!STATE._draggingHammer)return;
+  const cam=getCamera(),mx=STATE.mouse.x+cam.x,my=STATE.mouse.y+cam.y;
+  ctx.shadowColor='#f0883e';ctx.shadowBlur=30;
+  ctx.fillStyle='rgba(240,136,62,0.3)';ctx.beginPath();ctx.arc(mx,my,40,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#f0883e';ctx.beginPath();ctx.arc(mx,my,24,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ffcc88';ctx.beginPath();ctx.arc(mx,my,12,0,Math.PI*2);ctx.fill();
+  ctx.font='bold 32px "Press Start 2P",monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🔨',mx,my);
+  ctx.shadowBlur=0;
+}
+
 function drawNarratorStuff(){
   // 旁白泥潭
   if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){ctx.fillStyle='rgba(100,100,255,0.25)';ctx.beginPath();ctx.arc(pd.x,pd.y,70,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(150,150,255,0.5)';ctx.lineWidth=2;ctx.stroke()}
@@ -1242,10 +1267,13 @@ function updateHUD(){
   const xpPct=(p.xp/p.xpToNext*100).toFixed(0);DOM.xpFill.style.width=xpPct+'%';DOM.xpText.textContent=p.xp+' / '+p.xpToNext;
   DOM.bossAlert.classList.toggle('active',STATE.wave.bossActive);
   DOM.btnPause.textContent=STATE.paused?'▶ RESUME':'⏸ PAUSE';
+  const hb=$('btn-hammer');if(STATE._draggingHammer){hb.textContent='🎯';hb.style.opacity=1;hb.style.background='rgba(240,136,62,0.4)'}else if(STATE.hammerCd>0){hb.textContent=Math.ceil(STATE.hammerCd/1000)+'s';hb.style.opacity=0.5;hb.style.background='rgba(240,136,62,0.15)'}else{hb.textContent='🔨';hb.style.opacity=1;hb.style.background='rgba(240,136,62,0.15)'}
   if(p.shield>0){DOM.hudShieldDisp.style.display='inline';DOM.hudShield.textContent=Math.ceil(p.shield)}else{DOM.hudShieldDisp.style.display='none'}
   if(p.hpRegen>0){DOM.hudRegenDisp.style.display='inline';DOM.hudRegen.textContent=p.hpRegen.toFixed(1)}else{DOM.hudRegenDisp.style.display='none'}
   // 连击显示
   if(STATE.comboCount>=3){DOM.hudComboDisp.style.display='inline';DOM.hudCombo.textContent=STATE.comboCount}else{DOM.hudComboDisp.style.display='none'}
+  // 技能冷却显示
+  if(STATE.skillCooldown>0){DOM.hudSkillDisp.style.display='inline';DOM.hudSkill.textContent=Math.ceil(STATE.skillCooldown/1000)+'s'}else if(STATE.skillActive>0){DOM.hudSkillDisp.style.display='inline';DOM.hudSkill.textContent='激活 '+Math.ceil(STATE.skillActive/1000)+'s'}else{DOM.hudSkillDisp.style.display='inline';DOM.hudSkill.textContent='就绪'}
   // 发育加成面板
   const bonuses=[];if(p.xpBonus>0)bonuses.push('XP+'+p.xpBonus+'%');if(p.goldBonus>0)bonuses.push('G+'+p.goldBonus+'%');if(p.pickupRange>55)bonuses.push('范围+'+p.pickupRange);
   if(bonuses.length>0){DOM.hudBonusDisp.style.display='inline';DOM.hudBonus.textContent=bonuses.join(' ')}else{DOM.hudBonusDisp.style.display='none'}
@@ -1260,8 +1288,23 @@ function updateHUD(){
    ============================================================ */
 function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalClass.classList.remove('active');DOM.modalGameover.classList.remove('active');$('modal-shop').classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
 function startGame(){deleteSave();resetState();showModal('modal-class')}
+function smiteNarrator(e){
+  if(STATE.hammerCd>0||STATE.screen!=='playing')return;
+  STATE._draggingHammer=true;STATE._dragStart=Date.now();
+  e.preventDefault();
+}
+function activateSkill(){
+  const p=STATE.player,sk=CONFIG.CLASS_SKILLS[STATE.playerClass];
+  if(!sk||STATE.skillActive>0||STATE.skillCooldown>0)return;
+  STATE.skillActive=sk.dur;STATE.skillCooldown=sk.cd;STATE.skillCooldownMax=sk.cd;
+  if(STATE.playerClass==='atk'){STATE._frenzyEnd=Date.now()+sk.dur;spawnFloatText(p.x,p.y-40,'狂暴!','#ff8800');spawnParticles(p.x,p.y,'#ff4400',20)}
+  else if(STATE.playerClass==='def'){STATE._ironWallEnd=Date.now()+sk.dur;STATE._ironWallReflect=p.reflect;spawnFloatText(p.x,p.y-40,'铁壁!','#4488ff');spawnParticles(p.x,p.y,'#4488ff',20)}
+  else if(STATE.playerClass==='farm'){STATE._magnetEnd=Date.now()+sk.dur;spawnFloatText(p.x,p.y-40,'磁暴!','#aa44ff');spawnParticles(p.x,p.y,'#aa44ff',20)}
+  updateHUD();
+}
+
 function startWithClass(pc){STATE.playerClass=pc;STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
-function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
+function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;STATE.skillActive=0;STATE.skillCooldown=0;STATE._frenzyEnd=0;STATE._ironWallEnd=0;STATE._magnetEnd=0;STATE.hammerCd=0;STATE._draggingHammer=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
 function restartGame(){stopMusic();startGame()}
 function togglePause(){if(STATE.screen!=='playing')return;STATE.paused=!STATE.paused;if(!STATE.paused)lastTime=performance.now();updateHUD()}
 function toggleSettings(){const dd=$('settings-dropdown');dd.classList.toggle('active')}
@@ -1283,7 +1326,7 @@ function resetState(){
   STATE.stats={kills:0,bossKills:0,totalGold:0,eliteKills:0};STATE.attackCooldown=0;STATE.invincibleTimer=0;
   STATE.upgradeChoices=[];STATE.pendingUpgrades=0;STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;
-  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;STATE.boss10Active=false;setMusicSpeed(1);STATE.speedOrbs=[];STATE.speedBoost=0;STATE.speedOrbTimer=0;STATE.speedOrbHint=0;STATE.boss10Revive=true;STATE.boss10ReviveText=0;STATE.fakeFireSeeds=[];STATE.fakeFireHint=0;STATE.fireSeedSwapTimer=15000;
+  STATE.currentMap='field';STATE.maze=null;STATE.portalGlow=0;STATE.bloodBuff=false;STATE.bloodTextTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;STATE.skillActive=0;STATE.skillCooldown=0;STATE._frenzyEnd=0;STATE._ironWallEnd=0;STATE._magnetEnd=0;STATE.hammerCd=0;STATE.boss10Active=false;setMusicSpeed(1);STATE.speedOrbs=[];STATE.speedBoost=0;STATE.speedOrbTimer=0;STATE.speedOrbHint=0;STATE.boss10Revive=true;STATE.boss10ReviveText=0;STATE.fakeFireSeeds=[];STATE.fakeFireHint=0;STATE.fireSeedSwapTimer=15000;
   STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null}};
 }
 
@@ -1298,7 +1341,7 @@ function saveGame(){
     player:{
       x:p.x,y:p.y,level:p.level,xp:p.xp,xpToNext:p.xpToNext,
       hp:p.hp,maxHp:p.maxHp,atk:p.atk,speed:p.speed,atkSpd:p.atkSpd,gold:p.gold,
-      armorPen:p.armorPen,comboChance:p.comboChance,poisonDmg:p.poisonDmg,executeBonus:p.executeBonus,
+      armorPen:p.armorPen,comboChance:p.comboChance,poisonDmg:p.poisonDmg,executeBonus:p.executeBonus,critChance:p.critChance,critMult:p.critMult,
       lifesteal:p.lifesteal,reflect:p.reflect,damageReduction:p.damageReduction,shield:p.shield,maxShield:p.maxShield,
       xpBonus:p.xpBonus,goldBonus:p.goldBonus,pickupRange:p.pickupRange,hpRegen:p.hpRegen,
       lowHpCd:p.lowHpCd,
@@ -1340,7 +1383,7 @@ function toggleSave(){
     player:{
       x:p.x,y:p.y,level:p.level,xp:p.xp,xpToNext:p.xpToNext,
       hp:p.hp,maxHp:p.maxHp,atk:p.atk,speed:p.speed,atkSpd:p.atkSpd,gold:p.gold,
-      armorPen:p.armorPen,comboChance:p.comboChance,poisonDmg:p.poisonDmg,executeBonus:p.executeBonus,
+      armorPen:p.armorPen,comboChance:p.comboChance,poisonDmg:p.poisonDmg,executeBonus:p.executeBonus,critChance:p.critChance,critMult:p.critMult,
       lifesteal:p.lifesteal,reflect:p.reflect,damageReduction:p.damageReduction,shield:p.shield,maxShield:p.maxShield,
       xpBonus:p.xpBonus,goldBonus:p.goldBonus,pickupRange:p.pickupRange,hpRegen:p.hpRegen,
       lowHpCd:p.lowHpCd,
@@ -1372,7 +1415,7 @@ function loadSavePoint(){
     if(d.mazeGrid){STATE.maze={cols:CONFIG.MAZE_COLS,rows:CONFIG.MAZE_ROWS,cell:CONFIG.MAZE_CELL,grid:d.mazeGrid}}
     STATE.upgradePanelVisible=false;DOM.upgradePanel.classList.remove('active');
   }catch(e){return}
-  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
+  STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;STATE.skillActive=0;STATE.skillCooldown=0;STATE._frenzyEnd=0;STATE._ironWallEnd=0;STATE._magnetEnd=0;STATE.hammerCd=0;STATE._draggingHammer=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic();
   if(STATE.screen==='playing')spawnFloatText(STATE.player.x,STATE.player.y-20,'读档成功!','#4ecb71');
 }
 
@@ -1485,11 +1528,25 @@ function gameLoop(ts){
 
 function update(dt){
   const p=STATE.player,ds=dt/1000;
-  if(STATE._slotFreeze){if(STATE._slotMachine){const sm=STATE._slotMachine;sm.timer+=dt;const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){if(sm.timer<sm.reelStops[i]){sm.reels[i]=Math.floor((sm.timer/80+i*7)%icons.length)}else{sm.reels[i]=icons.indexOf(sm.finalReels[i])}}if(sm.timer>=sm.duration){if(sm.win){const def=CONFIG.UPGRADE_POOL.find(u=>u.id===sm.skillId);if(def){const val=def.id==='atkSpd'?randInt(def.min,def.max):parseFloat(rand(def.min,def.max).toFixed(1));switch(def.id){case'atk':p.atk+=Math.floor(val);break;case'maxHp':{const b=Math.floor(val);p.maxHp+=b;p.hp=Math.min(p.hp+b,p.maxHp);break}case'speed':p.speed=parseFloat((p.speed+val).toFixed(1));break;case'atkSpd':p.atkSpd=Math.max(120,p.atkSpd-val);break;case'hpRegen':p.hpRegen=parseFloat((p.hpRegen+val).toFixed(1));break;case'armorPen':p.armorPen+=Math.floor(val);break;case'comboChance':p.comboChance=Math.min(60,p.comboChance+Math.floor(val));break;case'poison':p.poisonDmg+=parseFloat(val.toFixed(1));break;case'execute':p.executeBonus+=Math.floor(val);break;case'lifesteal':p.lifesteal=Math.min(40,p.lifesteal+Math.floor(val));break;case'reflect':p.reflect=Math.min(45,p.reflect+Math.floor(val));break;case'dmgReduction':p.damageReduction=Math.min(50,p.damageReduction+Math.floor(val));break;case'shield':p.maxShield+=Math.floor(val);p.shield=p.maxShield;break;case'xpBonus':p.xpBonus+=Math.floor(val);break;case'goldBonus':p.goldBonus+=Math.floor(val);break;case'pickupRange':p.pickupRange+=Math.floor(val);break}}spawnFloatText(p.x,p.y-50,'中奖! '+def.name,'#ffd700');spawnParticles(p.x,p.y,'#ffd700',15)}else{const loseDmg=Math.floor(p.maxHp*0.10);if(p.shield>0){if(p.shield>=loseDmg){p.shield-=loseDmg}else{p.hp-=loseDmg-p.shield;p.shield=0}}else{p.hp-=loseDmg}p.hp=Math.max(1,p.hp);triggerShake(8,300);spawnParticles(p.x,p.y,'#ff4444',12);spawnFloatText(p.x,p.y-40,'未中奖! -'+loseDmg+'HP','#ff4444')}STATE._slotMachine=null;STATE._slotFreeze=false}}return;}
-  const{dx,dy}=getInputDir();const spdMul=STATE.speedBoost>0?1.6:1;p.x+=dx*p.speed*spdMul*ds;p.y+=dy*p.speed*spdMul*ds;
+  if(STATE._slotFreeze){if(STATE._slotMachine){const sm=STATE._slotMachine;sm.timer+=dt;const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){if(sm.timer<sm.reelStops[i]){sm.reels[i]=Math.floor((sm.timer/80+i*7)%icons.length)}else{sm.reels[i]=icons.indexOf(sm.finalReels[i])}}if(sm.timer>=sm.duration){if(sm.win){const def=CONFIG.UPGRADE_POOL.find(u=>u.id===sm.skillId);if(def){const val=def.id==='atkSpd'?randInt(def.min,def.max):parseFloat(rand(def.min,def.max).toFixed(1));switch(def.id){case'atk':p.atk+=Math.floor(val);break;case'maxHp':{const b=Math.floor(val);p.maxHp+=b;p.hp=Math.min(p.hp+b,p.maxHp);break}case'speed':p.speed=parseFloat((p.speed+val).toFixed(1));break;case'atkSpd':p.atkSpd=Math.max(120,p.atkSpd-val);break;case'hpRegen':p.hpRegen=parseFloat((p.hpRegen+val).toFixed(1));break;case'armorPen':p.armorPen+=Math.floor(val);break;case'comboChance':p.comboChance=Math.min(60,p.comboChance+Math.floor(val));break;case'poison':p.poisonDmg+=parseFloat(val.toFixed(1));break;case'execute':p.executeBonus+=Math.floor(val);break;case'lifesteal':p.lifesteal=Math.min(40,p.lifesteal+Math.floor(val));break;case'reflect':p.reflect=Math.min(45,p.reflect+Math.floor(val));break;case'dmgReduction':p.damageReduction=Math.min(50,p.damageReduction+Math.floor(val));break;case'shield':p.maxShield+=Math.floor(val);p.shield=p.maxShield;break;case'xpBonus':p.xpBonus+=Math.floor(val);break;case'goldBonus':p.goldBonus+=Math.floor(val);break;case'pickupRange':p.pickupRange+=Math.floor(val);break;case'critChance':p.critChance=Math.min(75,p.critChance+Math.floor(val));break}}spawnFloatText(p.x,p.y-50,'中奖! '+def.name,'#ffd700');spawnParticles(p.x,p.y,'#ffd700',15)}else{const loseDmg=Math.floor(p.maxHp*0.10);if(p.shield>0){if(p.shield>=loseDmg){p.shield-=loseDmg}else{p.hp-=loseDmg-p.shield;p.shield=0}}else{p.hp-=loseDmg}p.hp=Math.max(1,p.hp);triggerShake(8,300);spawnParticles(p.x,p.y,'#ff4444',12);spawnFloatText(p.x,p.y-40,'未中奖! -'+loseDmg+'HP','#ff4444')}STATE._slotMachine=null;STATE._slotFreeze=false}}return;}
+  // 主动技能冷却
+  if(STATE.skillActive>0){
+    STATE.skillActive-=dt;
+    if(STATE.skillActive<=0){STATE.skillActive=0;
+      if(STATE.playerClass==='atk'){STATE._frenzyEnd=0}
+      else if(STATE.playerClass==='def'){STATE._ironWallEnd=0}
+      else if(STATE.playerClass==='farm'){STATE._magnetEnd=0}
+    }
+  }
+  if(STATE.skillCooldown>0){STATE.skillCooldown-=dt;if(STATE.skillCooldown<=0)STATE.skillCooldown=0}
+  if(STATE.hammerCd>0){STATE.hammerCd-=dt;if(STATE.hammerCd<=0)STATE.hammerCd=0}
+  if(STATE._draggingHammer&&Date.now()-STATE._dragStart>5000){STATE._draggingHammer=false;STATE.hammerCd=7000;spawnFloatText(STATE.player.x,STATE.player.y-30,'超时!','#ff4444')}
+  // 磁暴吸取全屏掉落
+  if(STATE._magnetEnd>0){for(const d of STATE.drops){const dd=dist(p.x,p.y,d.x,d.y);if(dd>8){const a=Math.atan2(p.y-d.y,p.x-d.x);const sp=Math.min(1200,80000/(dd+10));d.x+=Math.cos(a)*sp*ds;d.y+=Math.sin(a)*sp*ds}}}
+  const{dx,dy}=getInputDir();const spdMul=(STATE.speedBoost>0?1.6:1)*(STATE._magnetEnd>0?2:1);p.x+=dx*p.speed*spdMul*ds;p.y+=dy*p.speed*spdMul*ds;
   if(STATE.currentMap==='maze'&&STATE.maze){const cl=clampMazePos(p.x,p.y,p.radius,STATE.maze);p.x=cl.x;p.y=cl.y}else{const wh=getMapWH();p.x=clamp(p.x,p.radius,wh.W-p.radius);p.y=clamp(p.y,p.radius,wh.H-p.radius)}
   // 旁白捣乱: 泥潭减速
-  if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){if(dist(p.x,p.y,pd.x,pd.y)<80){p.x-=dx*p.speed*0.4*ds;p.y-=dy*p.speed*0.4*ds}}
+  if(STATE.narratorPuddles)for(const pd of STATE.narratorPuddles){if(dist(p.x,p.y,pd.x,pd.y)<80){p.x-=dx*p.speed*0.2*ds;p.y-=dy*p.speed*0.2*ds}}
   // 旁白捣乱: 障碍墙推开
   if(STATE.narratorWalls)for(const w of STATE.narratorWalls){if(dist(p.x,p.y,w.x,w.y)<70){const wa=Math.atan2(p.y-w.y,p.x-w.x);p.x+=Math.cos(wa)*3;p.y+=Math.sin(wa)*3}}
   // 加速球系统 (第10关BOSS)
@@ -1513,6 +1570,7 @@ function update(dt){
   if(STATE.speedBoost>0)STATE.speedBoost-=dt;
   // 旁白捣乱计时器
   if(STATE._controlReverse>0)STATE._controlReverse-=dt;
+  if(STATE._doppel&&STATE.invincibleTimer<=0&&STATE._ironWallEnd<=0){const dp=STATE._doppel;if(dist(p.x,p.y,dp.x,dp.y)<p.radius+16){const dpDmg=Math.floor(p.maxHp*0.08);if(p.shield>0){if(p.shield>=dpDmg){p.shield-=dpDmg}else{p.hp-=dpDmg-p.shield;p.shield=0}}else{p.hp-=dpDmg}p.hp=Math.max(1,p.hp);STATE.invincibleTimer=400;spawnFloatText(p.x,p.y-20,'幻影!','#cc44ff');triggerShake(4,200)}}
   if(STATE._doppelTimer>0)STATE._doppelTimer-=dt;else STATE._doppel=null;
   if(STATE.narratorPuddles)for(let i=STATE.narratorPuddles.length-1;i>=0;i--){STATE.narratorPuddles[i].life-=dt;if(STATE.narratorPuddles[i].life<=0)STATE.narratorPuddles.splice(i,1)}
   if(STATE.narratorWalls)for(let i=STATE.narratorWalls.length-1;i>=0;i--){STATE.narratorWalls[i].life-=dt;if(STATE.narratorWalls[i].life<=0)STATE.narratorWalls.splice(i,1)}
@@ -1767,7 +1825,7 @@ function update(dt){
     if(e.flashTimer>0)e.flashTimer-=dt;
   }
   STATE.attackCooldown-=dt;
-  if(STATE.attackCooldown<=0&&STATE.enemies.length>0){let n=null,nd=Infinity;for(const e of STATE.enemies){const d=dist(p.x,p.y,e.x,e.y);if(d<nd){nd=d;n=e}}if(n){shootProjectile(n);STATE.attackCooldown=p.atkSpd}}
+  if(STATE.attackCooldown<=0&&STATE.enemies.length>0){let n=null,nd=Infinity;for(const e of STATE.enemies){const d=dist(p.x,p.y,e.x,e.y);if(d<nd){nd=d;n=e}}if(n){shootProjectile(n);STATE.attackCooldown=STATE._frenzyEnd>0?Math.floor(p.atkSpd/2):p.atkSpd}}
   updateProjectiles(dt);updateCombat(dt);updateDrops(dt);updateParticles(dt);
 }
 
