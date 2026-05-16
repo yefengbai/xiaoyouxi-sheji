@@ -186,18 +186,36 @@ canvas{
 
 <div class="modal-overlay active" id="modal-start">
   <div class="modal-box">
-    <h2 style="color:var(--accent)">⚔ HERO'S STAND</h2>
-    <p>英雄幸存者 — 三大流派自由构筑</p>
-    <p style="font-size:7px;line-height:2">
+    <h2 style="color:var(--accent);font-size:33px">⚔ HERO'S STAND</h2>
+    <p style="font-size:20px">英雄幸存者 — 三大流派自由构筑</p>
+    <p style="font-size:18px;line-height:2">
       ⚔️ 输出流：破甲·连击·毒素·斩杀 &nbsp;|&nbsp; 🛡 肉盾流：吸血·反伤·减伤·护盾<br>
       📈 发育流：经验·金币·拾取范围拉满 &nbsp;|&nbsp; 👾 BOSS第10/20波<br>
       👻 幽灵出没·恐怖氛围 &nbsp;|&nbsp; 🎮 WASD移动 &nbsp;|&nbsp; 🎯 自动攻击<br>
       🟣 远程·精英·连发弹幕 &nbsp;|&nbsp; 💀 20波全清 = 胜利
     </p>
     <div id="start-buttons" style="display:flex;gap:10px;justify-content:center;margin-top:6px;flex-wrap:wrap">
-      <button class="btn accent" onclick="startGame()" style="font-size:13px;padding:10px 24px">⚡ 新游戏</button>
-      <button class="btn accent" id="btn-continue" onclick="continueGame()" style="display:none;font-size:13px;padding:10px 24px;color:#4ecb71;border-color:#4ecb71">💾 继续</button>
-      <button class="btn" onclick="openPermShop()" style="font-size:10px;padding:10px 18px;color:#ffd700;border-color:#ffd700">⬆ 升级</button>
+      <button class="btn accent" onclick="startGame()" style="font-size:33px;padding:10px 24px">⚡ 新游戏</button>
+      <button class="btn accent" id="btn-continue" onclick="continueGame()" style="display:none;font-size:33px;padding:10px 24px;color:#4ecb71;border-color:#4ecb71">💾 继续</button>
+      <button class="btn" onclick="openPermShop()" style="font-size:25px;padding:10px 18px;color:#ffd700;border-color:#ffd700">⬆ 升级</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-class">
+  <div class="modal-box">
+    <h2 style="color:var(--accent);font-size:24px">🎯 选择流派</h2>
+    <p style="font-size:14px">选择一种流派，升级时更大概率刷出对应技能</p>
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button class="btn accent" onclick="startWithClass('atk')" style="font-size:16px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:32px">⚔️</span><span>输出流</span><span style="font-size:8px;color:var(--text-dim)">破甲·连击·毒素·斩杀</span>
+      </button>
+      <button class="btn accent" onclick="startWithClass('def')" style="font-size:16px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:32px">🛡️</span><span>肉盾流</span><span style="font-size:8px;color:var(--text-dim)">吸血·反伤·减伤·护盾</span>
+      </button>
+      <button class="btn accent" onclick="startWithClass('farm')" style="font-size:16px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:32px">📈</span><span>发育流</span><span style="font-size:8px;color:var(--text-dim)">经验·金币·拾取范围</span>
+      </button>
     </div>
   </div>
 </div>
@@ -222,6 +240,7 @@ canvas{
       <div id="ach-list" style="display:none;max-height:140px;overflow-y:auto;font-size:7px;line-height:1.8;color:var(--text-dim)"></div>
     </div>
     <button class="btn accent" onclick="showModal('modal-start')" style="margin-top:8px;font-size:10px;padding:6px 20px">← 返回</button>
+    <button class="btn" onclick="resetPermUpgrades()" style="margin-top:8px;font-size:10px;padding:6px 20px;color:#ff4444;border-color:#ff4444;margin-left:8px">🗑 重置</button>
   </div>
 </div>
 
@@ -317,7 +336,7 @@ const CONFIG = {
 };
 
 const STATE={
-  screen:'start',paused:false,muted:false,musicMuted:false,musicVolume:70,timeSpeed:1,
+  screen:'start',paused:false,muted:false,musicMuted:false,musicVolume:70,timeSpeed:1,playerClass:null,
   player:{...CONFIG.PLAYER},
   enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],
   wave:{number:1,totalEnemies:5,spawned:0,killed:0,bossActive:false,spawnQueue:[],spawnTimer:0,spawnInterval:350,waveDelay:1500,waveDelayTimer:0,transitioning:false},
@@ -340,7 +359,7 @@ const DOM={
   hudGold:$('hud-gold'),hudLv:$('hud-lv'),hudAtk:$('hud-atk'),hudSpd:$('hud-spd'),hudCd:$('hud-cd'),
   hpFill:$('hp-fill'),hpText:$('hp-text'),xpFill:$('xp-fill'),xpText:$('xp-text'),
   bossAlert:$('boss-alert'),btnPause:$('btn-pause'),
-  modalStart:$('modal-start'),modalGameover:$('modal-gameover'),
+  modalStart:$('modal-start'),modalClass:$('modal-class'),modalGameover:$('modal-gameover'),
   upgradeCards:$('upgrade-cards'),upgradePanel:$('upgrade-panel'),upPending:$('up-pending'),gameoverStats:$('gameover-stats'),
   hudRegen:$('hud-regen'),hudRegenDisp:$('hud-regen-disp'),hudLvTop:$('hud-lv-top'),
   hudDiff:$('hud-diff'),hudShield:$('hud-shield'),hudShieldDisp:$('hud-shield-disp'),
@@ -364,6 +383,11 @@ function buyPermUpgrade(id){
   const lv=permLv(id);if(lv>=u.maxLv)return;
   const cost=permCost(id);if(PERM.gold<cost)return;
   PERM.gold-=cost;PERM.upgrades[id]=(PERM.upgrades[id]||0)+1;
+  savePermState();renderPermShop();
+}
+function resetPermUpgrades(){
+  if(!confirm('确定要重置所有永久升级吗？金币和升级进度将全部清零，此操作不可恢复！'))return;
+  PERM.gold=0;PERM.upgrades={};
   savePermState();renderPermShop();
 }
 
@@ -758,11 +782,20 @@ function checkLevelUp(){
     STATE.pendingUpgrades++;showUpgradePanel();
   }
 }
+function buildWeightedPool(pc){
+  const pool=[];
+  for(const u of CONFIG.UPGRADE_POOL){pool.push(u);if(u.cat===pc){pool.push(u);pool.push(u);}}
+  return pool;
+}
+function pickFromPool(pool,count){
+  const choices=[];
+  for(let i=0;i<count&&pool.length>0;i++){const idx=randInt(0,pool.length-1);choices.push(pool[idx]);pool.splice(idx,1)}
+  return choices;
+}
 function showUpgradePanel(){
   if(STATE.upgradePanelVisible)return;
   STATE.upgradePanelVisible=true;
-  const pool=[...CONFIG.UPGRADE_POOL],choices=[];
-  for(let i=0;i<3&&pool.length>0;i++){const idx=randInt(0,pool.length-1);choices.push(pool[idx]);pool.splice(idx,1)}
+  const pool=buildWeightedPool(STATE.playerClass),choices=pickFromPool(pool,3);
   STATE.upgradeChoices=choices;
   if(STATE.timeSpeed===6){selectUpgrade(choices[0].id);return}
   renderUpgradePanel();
@@ -804,8 +837,7 @@ function selectUpgrade(uid){
   }
   STATE.pendingUpgrades--;
   if(STATE.pendingUpgrades>0){
-    const pool=[...CONFIG.UPGRADE_POOL],choices=[];
-    for(let i=0;i<3&&pool.length>0;i++){const idx=randInt(0,pool.length-1);choices.push(pool[idx]);pool.splice(idx,1)}
+    const pool=buildWeightedPool(STATE.playerClass),choices=pickFromPool(pool,3);
     STATE.upgradeChoices=choices;renderUpgradePanel();sfxLevelUp();
   }else{
     DOM.upgradePanel.classList.remove('active');STATE.upgradePanelVisible=false;
@@ -1226,8 +1258,9 @@ function updateHUD(){
 /* ============================================================
    场景管理
    ============================================================ */
-function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalGameover.classList.remove('active');$('modal-shop').classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
-function startGame(){deleteSave();resetState();STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
+function showModal(id){DOM.modalStart.classList.remove('active');DOM.modalClass.classList.remove('active');DOM.modalGameover.classList.remove('active');$('modal-shop').classList.remove('active');if(id)document.getElementById(id).classList.add('active')}
+function startGame(){deleteSave();resetState();showModal('modal-class')}
+function startWithClass(pc){STATE.playerClass=pc;STATE.screen='playing';showModal(null);initWave(STATE.wave.number);updateHUD();lastTime=performance.now();startMusic()}
 function continueGame(){if(!loadGame())return startGame();STATE.screen='playing';STATE.enemies=[];STATE.projectiles=[];STATE.enemyProjectiles=[];STATE.drops=[];STATE.particles=[];STATE.floatTexts=[];STATE.mapState={field:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},maze:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null},fireField:{enemies:[],projectiles:[],enemyProjectiles:[],drops:[],particles:[],floatTexts:[],wave:null,fireSeed:null}};STATE.attackCooldown=0;STATE.invincibleTimer=0;STATE.screenShake={intensity:0,duration:0};STATE.bossFlash=0;STATE.horrorFlicker=0;STATE.horrorTimer=0;STATE.comboCount=0;STATE.comboTimer=0;STATE.playerFacing=0;STATE.playerFrame=0;STATE.playerFrameTimer=0;STATE.fireBuff=false;STATE.fireBuffTextTimer=0;STATE.fireSeed=null;STATE.mazeBossAlive=false;STATE.narrator=null;STATE._hideFirePortal=false;STATE._controlReverse=0;STATE._doppel=null;STATE._doppelTimer=0;STATE.narratorFakeDrops=[];STATE.narratorFakeEnemies=[];STATE.narratorPuddles=[];STATE.narratorWalls=[];STATE.narratorStealGold=0;STATE._slotMachine=null;STATE._slotFreeze=false;showModal(null);initWave(STATE.wave.number);setMusicVolume(STATE.musicVolume);updateHUD();lastTime=performance.now();startMusic()}
 function restartGame(){stopMusic();startGame()}
 function togglePause(){if(STATE.screen!=='playing')return;STATE.paused=!STATE.paused;if(!STATE.paused)lastTime=performance.now();updateHUD()}
@@ -1275,6 +1308,7 @@ function saveGame(){
     stats:{kills:STATE.stats.kills,bossKills:STATE.stats.bossKills,totalGold:STATE.stats.totalGold,eliteKills:STATE.stats.eliteKills},
     currentMap:STATE.currentMap,bloodBuff:STATE.bloodBuff,fireBuff:STATE.fireBuff,mazeGrid:STATE.maze?STATE.maze.grid.map(r=>r.map(c=>({n:c.n,s:c.s,e:c.e,w:c.w}))):null,
     pendingUpgrades:STATE.pendingUpgrades,
+    playerClass:STATE.playerClass,
     timestamp:Date.now()
   };
   localStorage.setItem(SAVE_KEY,JSON.stringify(data));
@@ -1287,6 +1321,7 @@ function loadGame(){
     STATE.wave.number=d.wave.number;
     STATE.stats={...STATE.stats,...d.stats};
     STATE.pendingUpgrades=d.pendingUpgrades||0;
+    STATE.playerClass=d.playerClass||null;
     STATE.musicVolume=d.musicVolume||70;STATE.musicMuted=d.musicMuted||false;STATE.muted=d.muted||false;
     STATE.currentMap=d.currentMap||'field';STATE.bloodBuff=d.bloodBuff||false;STATE.fireBuff=d.fireBuff||false;
     if(d.mazeGrid){STATE.maze={cols:CONFIG.MAZE_COLS,rows:CONFIG.MAZE_ROWS,cell:CONFIG.MAZE_CELL,grid:d.mazeGrid}}
@@ -1315,6 +1350,7 @@ function toggleSave(){
     stats:{kills:STATE.stats.kills,bossKills:STATE.stats.bossKills,totalGold:STATE.stats.totalGold,eliteKills:STATE.stats.eliteKills},
     currentMap:STATE.currentMap,bloodBuff:STATE.bloodBuff,mazeGrid:STATE.maze?STATE.maze.grid.map(r=>r.map(c=>({n:c.n,s:c.s,e:c.e,w:c.w}))):null,
     pendingUpgrades:STATE.pendingUpgrades,
+    playerClass:STATE.playerClass,
     timestamp:Date.now()
   };
   localStorage.setItem(MANUAL_SAVE_KEY,JSON.stringify(data));
@@ -1330,6 +1366,7 @@ function loadSavePoint(){
     STATE.wave.number=d.wave.number;
     STATE.stats={...STATE.stats,...d.stats};
     STATE.pendingUpgrades=d.pendingUpgrades||0;
+    STATE.playerClass=d.playerClass||null;
     STATE.musicVolume=d.musicVolume||70;STATE.musicMuted=d.musicMuted||false;STATE.muted=d.muted||false;
     STATE.currentMap=d.currentMap||'field';STATE.bloodBuff=d.bloodBuff||false;
     if(d.mazeGrid){STATE.maze={cols:CONFIG.MAZE_COLS,rows:CONFIG.MAZE_ROWS,cell:CONFIG.MAZE_CELL,grid:d.mazeGrid}}
@@ -1448,7 +1485,7 @@ function gameLoop(ts){
 
 function update(dt){
   const p=STATE.player,ds=dt/1000;
-  if(STATE._slotFreeze){if(STATE._slotMachine){const sm=STATE._slotMachine;sm.timer+=dt;const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){if(sm.timer<sm.reelStops[i]){sm.reels[i]=Math.floor((sm.timer/80+i*7)%icons.length)}else{sm.reels[i]=icons.indexOf(sm.finalReels[i])}}if(sm.timer>=sm.duration){if(sm.win){const def=CONFIG.UPGRADE_POOL.find(u=>u.id===sm.skillId);if(def){const val=def.id==='atkSpd'?randInt(def.min,def.max):parseFloat(rand(def.min,def.max).toFixed(1));switch(def.id){case'atk':p.atk+=Math.floor(val);break;case'maxHp':{const b=Math.floor(val);p.maxHp+=b;p.hp=Math.min(p.hp+b,p.maxHp);break}case'speed':p.speed=parseFloat((p.speed+val).toFixed(1));break;case'atkSpd':p.atkSpd=Math.max(120,p.atkSpd-val);break;case'hpRegen':p.hpRegen=parseFloat((p.hpRegen+val).toFixed(1));break;case'armorPen':p.armorPen+=Math.floor(val);break;case'comboChance':p.comboChance=Math.min(60,p.comboChance+Math.floor(val));break;case'poison':p.poisonDmg+=parseFloat(val.toFixed(1));break;case'execute':p.executeBonus+=Math.floor(val);break;case'lifesteal':p.lifesteal=Math.min(40,p.lifesteal+Math.floor(val));break;case'reflect':p.reflect=Math.min(45,p.reflect+Math.floor(val));break;case'dmgReduction':p.damageReduction=Math.min(50,p.damageReduction+Math.floor(val));break;case'shield':p.maxShield+=Math.floor(val);p.shield=p.maxShield;break;case'xpBonus':p.xpBonus+=Math.floor(val);break;case'goldBonus':p.goldBonus+=Math.floor(val);break;case'pickupRange':p.pickupRange+=Math.floor(val);break}}spawnFloatText(p.x,p.y-50,'中奖! '+def.name,'#ffd700');spawnParticles(p.x,p.y,'#ffd700',15)}else{dealDamage({hp:99999,maxHp:99999,isWave15Boss:false,type:'normal',phaseTimer:9999},Math.floor(p.maxHp*0.12));triggerShake(8,300);spawnParticles(p.x,p.y,'#ff4444',12);spawnFloatText(p.x,p.y-40,'未中奖!','#ff4444')}STATE._slotMachine=null;STATE._slotFreeze=false}}return;}
+  if(STATE._slotFreeze){if(STATE._slotMachine){const sm=STATE._slotMachine;sm.timer+=dt;const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);for(let i=0;i<3;i++){if(sm.timer<sm.reelStops[i]){sm.reels[i]=Math.floor((sm.timer/80+i*7)%icons.length)}else{sm.reels[i]=icons.indexOf(sm.finalReels[i])}}if(sm.timer>=sm.duration){if(sm.win){const def=CONFIG.UPGRADE_POOL.find(u=>u.id===sm.skillId);if(def){const val=def.id==='atkSpd'?randInt(def.min,def.max):parseFloat(rand(def.min,def.max).toFixed(1));switch(def.id){case'atk':p.atk+=Math.floor(val);break;case'maxHp':{const b=Math.floor(val);p.maxHp+=b;p.hp=Math.min(p.hp+b,p.maxHp);break}case'speed':p.speed=parseFloat((p.speed+val).toFixed(1));break;case'atkSpd':p.atkSpd=Math.max(120,p.atkSpd-val);break;case'hpRegen':p.hpRegen=parseFloat((p.hpRegen+val).toFixed(1));break;case'armorPen':p.armorPen+=Math.floor(val);break;case'comboChance':p.comboChance=Math.min(60,p.comboChance+Math.floor(val));break;case'poison':p.poisonDmg+=parseFloat(val.toFixed(1));break;case'execute':p.executeBonus+=Math.floor(val);break;case'lifesteal':p.lifesteal=Math.min(40,p.lifesteal+Math.floor(val));break;case'reflect':p.reflect=Math.min(45,p.reflect+Math.floor(val));break;case'dmgReduction':p.damageReduction=Math.min(50,p.damageReduction+Math.floor(val));break;case'shield':p.maxShield+=Math.floor(val);p.shield=p.maxShield;break;case'xpBonus':p.xpBonus+=Math.floor(val);break;case'goldBonus':p.goldBonus+=Math.floor(val);break;case'pickupRange':p.pickupRange+=Math.floor(val);break}}spawnFloatText(p.x,p.y-50,'中奖! '+def.name,'#ffd700');spawnParticles(p.x,p.y,'#ffd700',15)}else{const loseDmg=Math.floor(p.maxHp*0.10);if(p.shield>0){if(p.shield>=loseDmg){p.shield-=loseDmg}else{p.hp-=loseDmg-p.shield;p.shield=0}}else{p.hp-=loseDmg}p.hp=Math.max(1,p.hp);triggerShake(8,300);spawnParticles(p.x,p.y,'#ff4444',12);spawnFloatText(p.x,p.y-40,'未中奖! -'+loseDmg+'HP','#ff4444')}STATE._slotMachine=null;STATE._slotFreeze=false}}return;}
   const{dx,dy}=getInputDir();const spdMul=STATE.speedBoost>0?1.6:1;p.x+=dx*p.speed*spdMul*ds;p.y+=dy*p.speed*spdMul*ds;
   if(STATE.currentMap==='maze'&&STATE.maze){const cl=clampMazePos(p.x,p.y,p.radius,STATE.maze);p.x=cl.x;p.y=cl.y}else{const wh=getMapWH();p.x=clamp(p.x,p.radius,wh.W-p.radius);p.y=clamp(p.y,p.radius,wh.H-p.radius)}
   // 旁白捣乱: 泥潭减速
@@ -1482,7 +1519,7 @@ function update(dt){
   if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){STATE.narratorFakeDrops[i].life-=dt;if(STATE.narratorFakeDrops[i].life<=0)STATE.narratorFakeDrops.splice(i,1)}
   if(STATE.narratorFakeEnemies)for(let i=STATE.narratorFakeEnemies.length-1;i>=0;i--){const fe=STATE.narratorFakeEnemies[i];fe.life-=dt;fe.x+=fe.vx*ds;fe.y+=fe.vy*ds;if(fe.life<=0)STATE.narratorFakeEnemies.splice(i,1)}
   // 旁白假掉落物: 拾取爆炸
-  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){const fd=STATE.narratorFakeDrops[i];if(dist(p.x,p.y,fd.x,fd.y)<p.radius+60){STATE.narratorFakeDrops.splice(i,1);const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);const win=Math.random()<0.35;const winIcon=icons[randInt(0,icons.length-1)];const reels=[win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)]];STATE._slotMachine={reels:[0,1,2],finalReels:reels,reelStops:[800,1600,2400],timer:0,duration:2800,win,skillId:win?CONFIG.UPGRADE_POOL[randInt(0,CONFIG.UPGRADE_POOL.length-1)].id:null};STATE._slotFreeze=true}}
+  if(STATE.narratorFakeDrops)for(let i=STATE.narratorFakeDrops.length-1;i>=0;i--){const fd=STATE.narratorFakeDrops[i];if(dist(p.x,p.y,fd.x,fd.y)<p.radius+60){STATE.narratorFakeDrops.splice(i,1);const icons=CONFIG.UPGRADE_POOL.map(u=>u.icon);const win=Math.random()<0.25;const winIcon=icons[randInt(0,icons.length-1)];const reels=[win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)],win?winIcon:icons[randInt(0,icons.length-1)]];STATE._slotMachine={reels:[0,1,2],finalReels:reels,reelStops:[800,1600,2400],timer:0,duration:2800,win,skillId:win?CONFIG.UPGRADE_POOL[randInt(0,CONFIG.UPGRADE_POOL.length-1)].id:null};STATE._slotFreeze=true}}
   // 精灵朝向
   const moving=dx!==0||dy!==0;
   if(moving){STATE.playerFacing=dy>0?0:dy<0?3:dx<0?1:2}
